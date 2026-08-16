@@ -12,28 +12,20 @@ RUN mvn -B clean package -DskipTests
 FROM eclipse-temurin:17-jre
 WORKDIR /app
 
-# Berjalan sebagai pengguna biasa, bukan root.
 RUN useradd --create-home --shell /bin/bash aplikasi
 
-# Folder foto disiapkan selagi masih root, lalu diserahkan ke pengguna aplikasi.
-#
-# Tanpa ini aplikasi menolak menyala di server: UNGGAHAN_FOLDER menunjuk
-# /data/unggahan, sedangkan pengguna biasa tidak boleh membuat folder di akar
-# sistem berkas. Akibatnya kontainer berjalan tetapi aplikasinya mati, dan
-# pemeriksaan kesehatan gagal tanpa penyebab yang kelihatan.
-#
-# Di Railway atau Render, volume permanen dipasang tepat di /data — jadi
-# folder ini menjadi titik pasangnya, dan isinya bertahan antar pembaruan.
+# Folder foto disiapkan di sini untuk keadaan tanpa volume. Kalau nanti volume
+# permanen dipasang di /data, isinya akan tertimpa — dan itu ditangani skrip
+# masuk.sh saat kontainer mulai.
 RUN mkdir -p /data/unggahan && chown -R aplikasi:aplikasi /data
 
-# Jar disalin dengan kepemilikan yang benar, supaya tetap terbaca setelah
-# berganti pengguna.
 COPY --from=pembangun --chown=aplikasi:aplikasi /app/target/*.jar aplikasi.jar
+COPY --chmod=755 masuk.sh /masuk.sh
 
-USER aplikasi
-
-# Layanan hosting biasanya menentukan sendiri porta lewat variabel PORT.
+# Sengaja TIDAK memakai USER di sini. Kontainer mulai sebagai root hanya untuk
+# membenahi izin volume, lalu masuk.sh menurunkan haknya ke pengguna aplikasi
+# sebelum Java dijalankan.
 ENV PORT=8080
 EXPOSE 8080
 
-ENTRYPOINT ["java", "-XX:MaxRAMPercentage=75", "-jar", "aplikasi.jar"]
+ENTRYPOINT ["/masuk.sh"]
