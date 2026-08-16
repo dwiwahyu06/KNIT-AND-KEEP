@@ -1,164 +1,186 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import AdminLayout from "../components/AdminLayout";
+import {
+  Baris, Chip, Galat, Input, JudulHalaman, Kartu, KartuAngka, Kosong,
+  Memuat, Pilihan, Sel, Tabel, Tombol,
+} from "../components/ui";
+import { keuanganApi } from "../lib/api";
+import { angka, labelStatus, rupiah, tanggal, warnaStatus } from "../lib/format";
+import { angkaCsv, tanggalCsv, unduhCsv } from "../lib/csv";
+import { Isian } from "../components/ui";
 
-const Keuangan = () => {
-  const [transactions, setTransactions] = useState([]);
-  const [form, setForm] = useState({
-    type: "income",
-    amount: "",
-    category: "Penjualan",
-    description: "",
-    source: "Website",
-  });
+export default function Keuangan() {
+  const [transaksi, setTransaksi] = useState([]);
+  const [ringkasan, setRingkasan] = useState(null);
+  const [memuat, setMemuat] = useState(true);
+  const [galat, setGalat] = useState("");
+  const [channel, setChannel] = useState("");
+  const [cari, setCari] = useState("");
+  const [dari, setDari] = useState("");
+  const [sampai, setSampai] = useState("");
 
-  // Fetch data
-  const fetchTransactions = () => {
-    fetch("http://localhost:8080/api/transactions")
-      .then((res) => res.json())
-      .then((res) => {
-        // Jika backend kirim { data: [...] } gunakan res.data
-        if (Array.isArray(res)) {
-          setTransactions(res);
-        } else if (Array.isArray(res.data)) {
-          setTransactions(res.data);
-        } else {
-          setTransactions([]); // fallback biar ga error
-        }
-      })
-      .catch((err) => {
-        console.error("Error fetching transactions:", err);
-        setTransactions([]);
-      });
-  };
+  const ambil = useCallback(async () => {
+    setMemuat(true);
+    setGalat("");
+    try {
+      const q = new URLSearchParams({ hanyaOmzet: "true" });
+      if (channel) q.set("channel", channel);
+      if (dari) q.set("dari", dari);
+      if (sampai) q.set("sampai", sampai);
+
+      const qr = new URLSearchParams();
+      if (channel) qr.set("channel", channel);
+      if (dari) qr.set("dari", dari);
+      if (sampai) qr.set("sampai", sampai);
+
+      const [t, r] = await Promise.all([
+        keuanganApi.transaksi(`?${q.toString()}`),
+        keuanganApi.ringkasanTransaksi(qr.toString()),
+      ]);
+      setTransaksi(t);
+      setRingkasan(r);
+    } catch (e) {
+      setGalat(e.message);
+    } finally {
+      setMemuat(false);
+    }
+  }, [channel, dari, sampai]);
 
   useEffect(() => {
-    fetchTransactions();
-  }, []);
+    ambil();
+  }, [ambil]);
 
-  // Handle input
-  const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
+  const hapus = async (t) => {
+    if (!window.confirm(`Hapus transaksi ${t.orderId}? Stok dikembalikan dan catatan kasnya dibatalkan.`)) return;
+    try {
+      await keuanganApi.hapusTransaksi(t.id);
+      await ambil();
+    } catch (e) {
+      setGalat(e.message);
+    }
   };
 
-  // Save income
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    fetch("http://localhost:8080/api/transactions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
-    }).then(() => {
-      setForm({
-        type: "income",
-        amount: "",
-        category: "Penjualan",
-        description: "",
-        source: "Website",
-      });
-      fetchTransactions();
-    });
-  };
+  const q = cari.trim().toLowerCase();
+  const terlihat = q
+    ? transaksi.filter(
+        (t) => t.orderId?.toLowerCase().includes(q) || t.namaPelanggan?.toLowerCase().includes(q)
+      )
+    : transaksi;
 
-  // Delete
-  const handleDelete = (id) => {
-    fetch(`http://localhost:8080/api/transactions/${id}`, {
-      method: "DELETE",
-    }).then(() => fetchTransactions());
-  };
+  const ekspor = () =>
+    unduhCsv(
+      "transaksi",
+      [
+        { judul: "Tanggal", ambil: (t) => tanggalCsv(t.createdAt, true) },
+        { judul: "Nomor pesanan", ambil: (t) => t.orderId },
+        { judul: "Pelanggan", ambil: (t) => t.namaPelanggan },
+        { judul: "Kanal", ambil: (t) => t.channel },
+        { judul: "Status", ambil: (t) => labelStatus(t.status) },
+        { judul: "Barang", ambil: (t) => angkaCsv(t.totalQty) },
+        { judul: "Subtotal", ambil: (t) => angkaCsv(t.subtotal) },
+        { judul: "Ongkir", ambil: (t) => angkaCsv(t.ongkir) },
+        { judul: "Dibayar", ambil: (t) => angkaCsv(t.amount) },
+        { judul: "Modal", ambil: (t) => angkaCsv(t.totalModal) },
+        { judul: "Laba", ambil: (t) => angkaCsv((t.subtotal || 0) - (t.totalModal || 0)) },
+      ],
+      terlihat
+    );
 
   return (
-    <div className="p-6">
-      <h1 className="text-2xl font-bold mb-4">Manajemen Pemasukan</h1>
+    <AdminLayout>
+      <JudulHalaman
+        judul="Transaksi"
+        keterangan="Semua penjualan yang dihitung sebagai omzet, dari web maupun dari kasir toko."
+        aksi={
+          <>
+            <Tombol variant="garis" size="sm" onClick={ekspor} disabled={terlihat.length === 0}>
+              Unduh CSV
+            </Tombol>
+            <Link to="/IncomeStatement"><Tombol variant="garis" size="sm">Laba rugi</Tombol></Link>
+            <Tombol variant="halus" size="sm" onClick={ambil}>Muat ulang</Tombol>
+          </>
+        }
+      />
 
-      {/* Form Tambah Pemasukan */}
-      <form
-        onSubmit={handleSubmit}
-        className="bg-white p-4 rounded-2xl shadow mb-6"
-      >
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <input
-            type="number"
-            name="amount"
-            placeholder="Nominal"
-            value={form.amount}
-            onChange={handleChange}
-            className="border p-2 rounded"
-            required
-          />
-          <input
-            type="text"
-            name="category"
-            placeholder="Kategori"
-            value={form.category}
-            onChange={handleChange}
-            className="border p-2 rounded"
-          />
-          <input
-            type="text"
-            name="source"
-            placeholder="Sumber (Shopee, IG, Website)"
-            value={form.source}
-            onChange={handleChange}
-            className="border p-2 rounded"
-          />
-          <input
-            type="text"
-            name="description"
-            placeholder="Deskripsi"
-            value={form.description}
-            onChange={handleChange}
-            className="border p-2 rounded"
-          />
+      {galat && <div className="mb-4"><Galat pesan={galat} onCoba={ambil} /></div>}
+
+      {ringkasan && (
+        <div className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <KartuAngka label="Omzet" nilai={rupiah(ringkasan.totalOmzet)} catatan={`${ringkasan.jumlahTransaksiOmzet} transaksi`} nada="brand" />
+          <KartuAngka label="Modal barang" nilai={rupiah(ringkasan.totalModal)} catatan="HPP dari harga modal tiap item" />
+          <KartuAngka label="Laba kotor" nilai={rupiah(ringkasan.labaKotor)} catatan="Omzet dikurangi modal" nada="baik" />
+          <KartuAngka label="Barang terjual" nilai={angka(ringkasan.totalBarangTerjual)} catatan="Total unit keluar" />
         </div>
-        <button
-          type="submit"
-          className="mt-4 bg-green-600 text-white px-4 py-2 rounded"
+      )}
+
+      <Kartu className="mb-5">
+        <div className="grid gap-3 sm:grid-cols-4">
+          <Isian label="Cari">
+            <Input
+              placeholder="Nomor pesanan atau pelanggan…"
+              value={cari}
+              onChange={(e) => setCari(e.target.value)}
+            />
+          </Isian>
+          <Isian label="Kanal">
+            <Pilihan value={channel} onChange={(e) => setChannel(e.target.value)}>
+              <option value="">Semua kanal</option>
+              <option value="ONLINE">Online</option>
+              <option value="OFFLINE">Offline</option>
+            </Pilihan>
+          </Isian>
+          <Isian label="Dari tanggal">
+            <Input type="date" value={dari} onChange={(e) => setDari(e.target.value)} />
+          </Isian>
+          <Isian label="Sampai tanggal">
+            <Input type="date" value={sampai} onChange={(e) => setSampai(e.target.value)} />
+          </Isian>
+        </div>
+      </Kartu>
+
+      {memuat ? (
+        <Memuat />
+      ) : terlihat.length === 0 ? (
+        <Kosong
+          judul="Belum ada transaksi"
+          keterangan="Transaksi muncul setelah ada pembayaran yang dikonfirmasi atau penjualan di kasir."
+          aksi={<Link to="/Kasir"><Tombol variant="aksen" size="sm">Catat penjualan offline</Tombol></Link>}
+        />
+      ) : (
+        <Tabel
+          kepala={["Pesanan", "Pelanggan", "Kanal", "Bayar", "Modal", "Laba", "Status", ""]}
+          min="min-w-[960px]"
         >
-          Tambah Pemasukan
-        </button>
-      </form>
-
-      {/* Daftar Transaksi Income */}
-      <table className="w-full border-collapse bg-white shadow rounded-2xl overflow-hidden">
-        <thead className="bg-green-200">
-          <tr>
-            <th className="p-2">Tanggal</th>
-            <th className="p-2">Nominal</th>
-            <th className="p-2">Kategori</th>
-            <th className="p-2">Sumber</th>
-            <th className="p-2">Deskripsi</th>
-            <th className="p-2">Aksi</th>
-          </tr>
-        </thead>
-        <tbody>
-          {transactions
-            .filter((trx) => trx.type === "income")
-            .map((trx) => (
-              <tr key={trx.id} className="text-center border-t">
-                <td className="p-2">
-                  {trx.createdAt
-                    ? new Date(trx.createdAt).toLocaleDateString()
-                    : "-"}
-                </td>
-                <td className="p-2">
-                  Rp {Number(trx.amount).toLocaleString()}
-                </td>
-                <td className="p-2">{trx.category}</td>
-                <td className="p-2">{trx.source}</td>
-                <td className="p-2">{trx.description}</td>
-                <td className="p-2">
-                  <button
-                    onClick={() => handleDelete(trx.id)}
-                    className="bg-red-500 text-white px-2 py-1 rounded"
-                  >
-                    Hapus
-                  </button>
-                </td>
-              </tr>
-            ))}
-        </tbody>
-      </table>
-    </div>
+          {terlihat.map((t) => (
+            <Baris key={t.id}>
+              <Sel>
+                <Link to={`/AdminOrderDetailPage/${t.id}`} className="font-mono text-xs font-semibold text-brand-600 hover:underline">
+                  {t.orderId}
+                </Link>
+                <div className="text-xs text-sand-400">{tanggal(t.createdAt, true)}</div>
+              </Sel>
+              <Sel>{t.namaPelanggan}</Sel>
+              <Sel>
+                <Chip className={t.channel === "OFFLINE" ? "bg-wool-100 text-wool-600" : "bg-brand-100 text-brand-600"}>
+                  {t.channel}
+                </Chip>
+              </Sel>
+              <Sel className="tabular font-semibold">{rupiah(t.amount)}</Sel>
+              <Sel className="tabular text-sand-400">{rupiah(t.totalModal)}</Sel>
+              <Sel className="tabular font-semibold text-leaf-500">
+                {rupiah((t.subtotal || 0) - (t.totalModal || 0))}
+              </Sel>
+              <Sel><Chip className={warnaStatus(t.status)}>{labelStatus(t.status)}</Chip></Sel>
+              <Sel>
+                <div className="flex justify-end">
+                  <Tombol size="sm" variant="garis" onClick={() => hapus(t)}>Hapus</Tombol>
+                </div>
+              </Sel>
+            </Baris>
+          ))}
+        </Tabel>
+      )}
+    </AdminLayout>
   );
-};
-
-export default Keuangan;
+}

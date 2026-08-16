@@ -1,85 +1,143 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { FaArrowLeft } from 'react-icons/fa';
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
+import AdminLayout from "../components/AdminLayout";
+import {
+  Baris, Chip, Galat, Input, JudulHalaman, Kartu, Kosong, Memuat, Pilihan, Sel, Tabel, Tombol,
+} from "../components/ui";
+import { pesananApi } from "../lib/api";
+import { labelStatus, rupiah, tanggal, warnaStatus } from "../lib/format";
 
-function formatIDR(value) {
-    const n = Number(value || 0);
-    return new Intl.NumberFormat("id-ID", {
-        style: "currency",
-        currency: "IDR",
-        maximumFractionDigits: 0,
-    }).format(isNaN(n) ? 0 : n);
-}
-
-const API_URL = "http://localhost:8080/api/orders";
+const STATUS = [
+  "", "MENUNGGU_PEMBAYARAN", "DIPROSES", "DIKIRIM", "SELESAI",
+  "DIBATALKAN", "KOMPLAIN", "RETUR_DIPROSES", "REFUND", "GANTI_RUGI",
+];
 
 export default function AdminOrdersPage() {
-    const [orders, setOrders] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
+  const [pesanan, setPesanan] = useState([]);
+  const [memuat, setMemuat] = useState(true);
+  const [galat, setGalat] = useState("");
+  const [cari, setCari] = useState("");
 
-    const fetchAllOrders = useCallback(async () => {
-        setLoading(true);
-        try {
-            const res = await fetch(`${API_URL}/admin/all`);
-            if (!res.ok) throw new Error("Gagal mengambil data pesanan");
-            const data = await res.json();
-            setOrders(data);
-        } catch (err) {
-            console.error(err);
-        } finally {
-            setLoading(false);
-        }
-    }, []);
+  const channel = params.get("channel") || "";
+  const status = params.get("status") || "";
 
-    useEffect(() => {
-        fetchAllOrders();
-    }, [fetchAllOrders]);
-    
-    if (loading) {
-        return <div className="p-10 text-center">Memuat Pesanan...</div>;
+  const ambil = useCallback(async () => {
+    setMemuat(true);
+    setGalat("");
+    try {
+      setPesanan(await pesananApi.semua(channel, status));
+    } catch (e) {
+      setGalat(e.message);
+    } finally {
+      setMemuat(false);
     }
+  }, [channel, status]);
 
-    return (
-        <div className="min-h-screen bg-[#183D4B] p-6 md:p-10 text-white">
-            <div className="flex justify-between items-center mb-6">
-                <h1 className="text-3xl font-bold">Manajemen Pesanan</h1>
-                 <button onClick={() => navigate('/Dashboard')} className="flex items-center gap-2 bg-white/10 text-white px-4 py-2 rounded-lg font-semibold transition hover:bg-white/20">
-                    <FaArrowLeft /> Kembali
-                </button>
-            </div>
-            <div className="rounded-2xl bg-white shadow-xl text-black">
-                <div className="w-full overflow-x-auto">
-                    <table className="min-w-full text-left">
-                        <thead className="bg-slate-100">
-                            <tr className="text-sm uppercase text-slate-600">
-                                <th className="px-4 py-3">Order ID</th>
-                                <th className="px-4 py-3">Tanggal Dibuat</th>
-                                <th className="px-4 py-3">Total</th>
-                                <th className="px-4 py-3 text-center">Status Pembayaran</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y">
-                            {orders.map(order => (
-                                <tr key={order.id} className="hover:bg-slate-50">
-                                    <td className="px-4 py-3 font-mono text-xs">{order.orderId}</td>
-                                    <td className="px-4 py-3 text-sm">{new Date(order.createdAt).toLocaleString()}</td>
-                                    <td className="px-4 py-3 font-semibold">{formatIDR(order.amount)}</td>
-                                    <td className="px-4 py-3 text-center">
-                                         <span className={`px-3 py-1 text-xs font-semibold rounded-full ${
-                                            order.status === 'SUCCESS' ? 'bg-emerald-100 text-emerald-800' :
-                                            order.status === 'PENDING' ? 'bg-amber-100 text-amber-800' :
-                                            'bg-red-100 text-red-800'
-                                        }`}>
-                                            {order.status}
-                                        </span>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
+  useEffect(() => {
+    ambil();
+  }, [ambil]);
+
+  const ubahFilter = (kunci, nilai) => {
+    const baru = new URLSearchParams(params);
+    if (nilai) baru.set(kunci, nilai);
+    else baru.delete(kunci);
+    setParams(baru);
+  };
+
+  const terlihat = useMemo(() => {
+    const q = cari.trim().toLowerCase();
+    if (!q) return pesanan;
+    return pesanan.filter(
+      (p) =>
+        p.orderId?.toLowerCase().includes(q) ||
+        p.namaPelanggan?.toLowerCase().includes(q) ||
+        p.nomorResi?.toLowerCase().includes(q)
     );
+  }, [pesanan, cari]);
+
+  return (
+    <AdminLayout>
+      <JudulHalaman
+        judul="Pesanan"
+        keterangan="Semua pesanan dari web maupun dari kasir toko. Klik satu baris untuk memajukan statusnya."
+        aksi={
+          <>
+            <Link to="/Kasir"><Tombol variant="aksen" size="sm">Penjualan offline</Tombol></Link>
+            <Tombol variant="garis" size="sm" onClick={ambil}>Muat ulang</Tombol>
+          </>
+        }
+      />
+
+      <Kartu className="mb-5">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Input
+            placeholder="Cari nomor pesanan, pelanggan, atau resi…"
+            value={cari}
+            onChange={(e) => setCari(e.target.value)}
+          />
+          <Pilihan value={channel} onChange={(e) => ubahFilter("channel", e.target.value)}>
+            <option value="">Semua kanal</option>
+            <option value="ONLINE">Online</option>
+            <option value="OFFLINE">Offline</option>
+          </Pilihan>
+          <Pilihan value={status} onChange={(e) => ubahFilter("status", e.target.value)}>
+            {STATUS.map((s) => (
+              <option key={s} value={s}>{s ? labelStatus(s) : "Semua status"}</option>
+            ))}
+          </Pilihan>
+        </div>
+      </Kartu>
+
+      {galat && <Galat pesan={galat} onCoba={ambil} />}
+
+      {memuat ? (
+        <Memuat />
+      ) : terlihat.length === 0 ? (
+        <Kosong
+          judul="Tidak ada pesanan"
+          keterangan={
+            cari || channel || status
+              ? "Tidak ada pesanan yang cocok dengan filter ini."
+              : "Pesanan akan muncul di sini setelah ada pembelian atau penjualan di kasir."
+          }
+          aksi={<Link to="/Kasir"><Tombol variant="aksen" size="sm">Catat penjualan offline</Tombol></Link>}
+        />
+      ) : (
+        <Tabel
+          kepala={["Pesanan", "Pelanggan", "Kanal", "Barang", "Total", "Status", "Resi"]}
+          min="min-w-[900px]"
+        >
+          {terlihat.map((p) => (
+            <Baris key={p.id}>
+              <Sel>
+                <Link
+                  to={`/AdminOrderDetailPage/${p.id}`}
+                  className="font-mono text-xs font-semibold text-brand-600 hover:underline"
+                >
+                  {p.orderId}
+                </Link>
+                <div className="text-xs text-sand-400">{tanggal(p.createdAt, true)}</div>
+              </Sel>
+              <Sel>
+                <span className="font-medium text-sand-800">{p.namaPelanggan}</span>
+                {p.metodeBayar && (
+                  <div className="text-xs text-sand-400">{p.metodeBayar}</div>
+                )}
+              </Sel>
+              <Sel>
+                <Chip className={p.channel === "OFFLINE" ? "bg-wool-100 text-wool-600" : "bg-brand-100 text-brand-600"}>
+                  {p.channel}
+                </Chip>
+              </Sel>
+              <Sel className="tabular text-sand-500">{p.totalQty} item</Sel>
+              <Sel className="tabular font-semibold text-sand-800">{rupiah(p.amount)}</Sel>
+              <Sel><Chip className={warnaStatus(p.status)}>{labelStatus(p.status)}</Chip></Sel>
+              <Sel className="font-mono text-xs text-sand-500">{p.nomorResi || "—"}</Sel>
+            </Baris>
+          ))}
+        </Tabel>
+      )}
+    </AdminLayout>
+  );
 }
