@@ -18,6 +18,12 @@ public class UserPelangganService {
 
     // REGISTER
     public UserPelanggan register(UserPelanggan user) {
+        if (user.getUsername() == null || user.getUsername().isBlank()) {
+            throw new RuntimeException("Nama pengguna wajib diisi!");
+        }
+        if (user.getPassword() == null || user.getPassword().length() < 6) {
+            throw new RuntimeException("Password minimal 6 karakter!");
+        }
         if (repository.existsByUsername(user.getUsername())) {
             throw new RuntimeException("Username sudah dipakai!");
         }
@@ -25,17 +31,22 @@ public class UserPelangganService {
             throw new RuntimeException("Email sudah dipakai!");
         }
 
-        // password harus di-hash
         user.setPassword(passwordEncoder.encode(user.getPassword()));
-
+        user.setAktif(true);
         return repository.save(user);
     }
 
     // LOGIN
     public UserPelanggan login(String username, String password) {
-        return repository.findByUsername(username)
+        UserPelanggan user = repository.findByUsername(username)
                 .filter(dbUser -> passwordEncoder.matches(password, dbUser.getPassword()))
                 .orElseThrow(() -> new RuntimeException("Username atau password salah!"));
+
+        // Akun yang dinonaktifkan admin tetap ada datanya, tapi tidak bisa masuk.
+        if (Boolean.FALSE.equals(user.getAktif())) {
+            throw new RuntimeException("Akun ini sedang dinonaktifkan. Hubungi pengelola toko.");
+        }
+        return user;
     }
 
     // UPDATE PROFIL (nama/email)
