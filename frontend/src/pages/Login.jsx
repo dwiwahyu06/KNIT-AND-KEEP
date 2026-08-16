@@ -1,105 +1,74 @@
-// src/pages/Login.jsx
 import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import AuthShell from "../components/AuthShell";
+import { Galat, Input, Isian, Tombol } from "../components/ui";
+import { akunApi } from "../lib/api";
+import { simpanAdmin } from "../lib/session";
 
-function Login() {
-  const [form, setForm] = useState({ username: "", password: "" });
-  const [message, setMessage] = useState("");
+export default function Login() {
   const navigate = useNavigate();
+  const [form, setForm] = useState({ username: "", password: "" });
+  const [galat, setGalat] = useState("");
+  const [proses, setProses] = useState(false);
 
-  const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
-  };
-
-  const handleSubmit = async (e) => {
+  const kirim = async (e) => {
     e.preventDefault();
-
+    setProses(true);
+    setGalat("");
     try {
-      const res = await fetch("http://localhost:8080/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
-
-      const data = await res.json();
-
-      if (data.success) {
-        setMessage(data.message);
-
-        // simpan user ke localStorage
-        localStorage.setItem("user", JSON.stringify(data.user));
-
-        // pindah ke dashboard
-        navigate("/Dashboard");
-      } else {
-        setMessage(data.message);
-      }
-    } catch (error) {
-      console.error(error);
-      setMessage("Terjadi kesalahan server!");
+      const hasil = await akunApi.loginAdmin(form.username, form.password);
+      simpanAdmin(hasil.user, hasil.token);
+      navigate("/Dashboard");
+    } catch (err) {
+      setGalat(err.message);
+    } finally {
+      setProses(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 flex flex-col">
-      {/* 🔹 Header */}
-      <header className="bg-blue-600 text-white p-4 shadow-md">
-        <h1 className="text-xl font-bold text-center">Login Page</h1>
-      </header>
-
-      {/* 🔹 Box Form */}
-      <div className="flex flex-1 items-center justify-center">
-        <div className="bg-blue-50 shadow-lg rounded-xl p-8 w-full max-w-md">
-          <h2 className="text-2xl font-bold text-blue-700 mb-6 text-center">
-            Silakan Login
-          </h2>
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-blue-700 font-medium mb-1">
-                Username
-              </label>
-              <input
-                type="text"
-                name="username"
-                value={form.username}
-                onChange={handleChange}
-                placeholder="Masukkan username"
-                className="w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-blue-700 font-medium mb-1">
-                Password
-              </label>
-              <input
-                type="password"
-                name="password"
-                value={form.password}
-                onChange={handleChange}
-                placeholder="Masukkan password"
-                className="w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
-                required
-              />
-            </div>
-
-            <button
-              type="submit"
-              className="w-full bg-blue-600 text-white p-3 rounded-lg font-semibold hover:bg-blue-700 transition"
-            >
-              Login
-            </button>
-          </form>
-
-          {message && (
-            <p className="mt-4 text-center text-red-500 font-medium">{message}</p>
-          )}
-        </div>
-      </div>
-    </div>
+    <AuthShell
+      judul="Masuk sebagai pengelola"
+      keterangan="Panel admin untuk mengelola stok, pesanan, dan pembukuan toko."
+      sisi={{
+        judul: "Satu panel untuk seluruh toko.",
+        teks: "Penjualan online dan penjualan di kasir tercatat di tempat yang sama, jadi stok dan laporan keuangan tidak pernah berbeda.",
+      }}
+      bawah={
+        <>
+          Bukan pengelola?{" "}
+          <Link to="/LoginPelanggan" className="font-semibold text-brand-600 hover:underline">
+            Masuk sebagai pelanggan
+          </Link>
+          <span className="mt-2 block text-xs text-sand-400">
+            Akun pengelola baru ditambahkan dari halaman Akun di dalam panel admin.
+          </span>
+        </>
+      }
+    >
+      <form onSubmit={kirim} className="space-y-4">
+        {galat && <Galat pesan={galat} />}
+        <Isian label="Nama pengguna" wajib>
+          <Input
+            required
+            autoFocus
+            value={form.username}
+            onChange={(e) => setForm({ ...form, username: e.target.value })}
+            placeholder="admin"
+          />
+        </Isian>
+        <Isian label="Password" wajib>
+          <Input
+            type="password"
+            required
+            value={form.password}
+            onChange={(e) => setForm({ ...form, password: e.target.value })}
+          />
+        </Isian>
+        <Tombol type="submit" className="w-full" disabled={proses}>
+          {proses ? "Memeriksa…" : "Masuk"}
+        </Tombol>
+      </form>
+    </AuthShell>
   );
 }
-
-export default Login;

@@ -1,1181 +1,396 @@
-// import React, { useState, useEffect } from 'react';
-// import { useNavigate } from 'react-router-dom';
-
-// function formatIDR(value) {
-//     const n = Number(value || 0);
-//     return new Intl.NumberFormat("id-ID", {
-//         style: "currency",
-//         currency: "IDR",
-//         maximumFractionDigits: 0,
-//     }).format(isNaN(n) ? 0 : n);
-// }
-
-// const API_BASE_URL = 'http://localhost:8080/api';
-
-// const ID_KECAMATAN_ASAL = '4835';
-
-// export default function CheckoutPage() {
-//     const navigate = useNavigate();
-//     const [itemsToCheckout, setItemsToCheckout] = useState([]);
-//     const [selectedAddress, setSelectedAddress] = useState(null);
-//     const [loading, setLoading] = useState(true);
-    
-//     const loggedInUserId = localStorage.getItem('loggedInUserId');
-
-//     const [shippingOptions, setShippingOptions] = useState([]);
-//     const [selectedShipping, setSelectedShipping] = useState(null);
-//     const [shippingCost, setShippingCost] = useState(0);
-//     const [loadingShipping, setLoadingShipping] = useState(false);
-
-//     useEffect(() => {
-//         if (!loggedInUserId) {
-//             alert("Sesi tidak ditemukan, silakan login.");
-//             navigate('/');
-//             return;
-//         }
-
-//         const cartKey = `itemsToCheckout_${loggedInUserId}`;
-//         const itemsJSON = localStorage.getItem(cartKey);
-//         if (!itemsJSON || JSON.parse(itemsJSON).length === 0) {
-//             alert("Tidak ada item yang dipilih untuk checkout.");
-//             navigate('/CartPage');
-//             return;
-//         }
-//         setItemsToCheckout(JSON.parse(itemsJSON));
-
-//         const addressKey = `selectedAddress_${loggedInUserId}`;
-//         const addressJSON = localStorage.getItem(addressKey);
-//         if (!addressJSON) {
-//             // Jika pengguna langsung ke checkout tanpa memilih alamat,
-//             // arahkan mereka ke halaman pilih alamat.
-//             navigate('/AddressForm');
-//             return;
-//         }
-//         setSelectedAddress(JSON.parse(addressJSON));
-        
-//         setLoading(false);
-
-//     }, [loggedInUserId, navigate]);
-//      useEffect(() => {
-//         if (selectedAddress && itemsToCheckout.length > 0) {
-//             const calculateOngkir = async () => {
-//                 setLoadingShipping(true);
-//                 setShippingOptions([]);
-//                 setSelectedShipping(null);
-//                 setShippingCost(0);
-                
-//                 const originCityId = '152'; // Ganti dengan ID kota asal toko Anda (Contoh: Kota Bandung)
-//                 const destinationCityId = selectedAddress.cityId;
-                
-//                 const totalWeight = itemsToCheckout.reduce((total, item) => total + (item.product.weight || 100) * item.quantity, 0);
-                
-//                 if (totalWeight > 0 && destinationCityId) {
-//                     try {
-//                         const payload = { origin: originCityId, destination: destinationCityId, weight: totalWeight, courier: "jne" };
-//                         const res = await fetch(`${API_BASE_URL}/shipping/cost`, {
-//                             method: 'POST',
-//                             headers: { 'Content-Type': 'application/json' },
-//                             body: JSON.stringify(payload)
-//                         });
-//                         const data = await res.json();
-//                         if (res.ok) {
-//                             setShippingOptions(data);
-//                         } else {
-//                             throw new Error(data.error || "Gagal mengambil ongkir");
-//                         }
-//                     } catch (err) {
-//                         console.error("Gagal mengambil ongkir:", err);
-//                         alert(err.message);
-//                     } finally {
-//                         setLoadingShipping(false);
-//                     }
-//                 } else {
-//                     setLoadingShipping(false);
-//                 }
-//             };
-//             calculateOngkir();
-//         }
-//     }, [selectedAddress, itemsToCheckout]);
-    
-//     const calculateTotal = () => {
-//         const subtotal = itemsToCheckout.reduce((total, item) => total + (item.product.sellPrice * item.quantity), 0);
-//         return subtotal + shippingCost;
-//     };
-
-//     const handleSelectShipping = (option) => {
-//         setSelectedShipping(option);
-//         setShippingCost(option.cost);
-//     };
-
-//     const handlePayment = async () => {
-//         if (!selectedAddress) {
-//             alert("Alamat pengiriman tidak valid.");
-//             return;
-//         }
-//         const totalAmount = calculateTotal();
-//         try {
-//             const response = await fetch(`${API_BASE_URL}/payments/create-transaction`, {
-//                 method: 'POST',
-//                 headers: { 'Content-Type': 'application/json' },
-//                 body: JSON.stringify({ 
-//                     amount: totalAmount,
-//                     pelangganId: loggedInUserId 
-//                 }),
-//             });
-            
-//             if (!response.ok) {
-//                 const errorData = await response.json().catch(() => ({}));
-//                 throw new Error(errorData.error || "Gagal membuat transaksi di backend.");
-//             }
-
-//             const data = await response.json();
-//             const { token } = data;
-//             if (!token) {
-//                 alert('Gagal mendapatkan token pembayaran.');
-//                 return;
-//             }
-
-//             window.snap.pay(token, {
-//                 onSuccess: (result) => {
-//                     console.log('SUCCESS', result);
-//                     alert('Pembayaran Berhasil!');
-//                     const cartKey = `itemsToCheckout_${loggedInUserId}`;
-//                     const addressKey = `selectedAddress_${loggedInUserId}`;
-//                     localStorage.removeItem(cartKey);
-//                     localStorage.removeItem(addressKey);
-//                     navigate('/Transaksi'); 
-//                 },
-//                 onPending: (result) => {
-//                     console.log('PENDING', result);
-//                     alert('Menunggu pembayaran Anda...');
-//                     const cartKey = `itemsToCheckout_${loggedInUserId}`;
-//                     const addressKey = `selectedAddress_${loggedInUserId}`;
-//                     localStorage.removeItem(cartKey);
-//                     localStorage.removeItem(addressKey);
-//                     navigate('/CartPage'); 
-//                 },
-//                 onError: (result) => {
-//                     console.log('ERROR', result);
-//                     alert('Pembayaran Gagal!');
-//                 },
-//                 onClose: () => {
-//                     console.log('Anda menutup pop-up pembayaran.');
-//                 }
-//             });
-//         } catch (error) {
-//             console.error('Error saat proses pembayaran:', error);
-//             alert('Terjadi kesalahan: ' + error.message);
-//         }
-//     };
-
-//     if (loading) return <div className="min-h-screen bg-[#183D4B] text-white flex justify-center items-center">Mempersiapkan Checkout...</div>;
-
-//     return (
-//         <div className="min-h-screen bg-[#183D4B] p-10 text-white flex justify-center items-center">
-//             <div className="w-full max-w-lg bg-white/10 p-8 rounded-2xl shadow-2xl">
-//                 <h1 className="text-3xl font-bold mb-6">Ringkasan Checkout</h1>
-                
-//                 <div className="space-y-2 max-h-48 overflow-y-auto pr-2 mb-4 border-b border-white/20 pb-4">
-//                     <h2 className="font-semibold text-lg mb-2">Produk yang Dipesan</h2>
-//                     {itemsToCheckout.map(item => (
-//                         <div key={item.id} className="flex justify-between text-slate-300">
-//                             <span>{item.product.name} (x{item.quantity})</span>
-//                             <span>{formatIDR(item.product.sellPrice * item.quantity)}</span>
-//                         </div>
-//                     ))}
-//                 </div>
-                
-//                 <div className="my-6">
-//                     <h2 className="block font-semibold mb-2 text-lg">Alamat Pengiriman</h2>
-//                     {selectedAddress ? (
-//                         <div className="bg-white/20 p-4 rounded-lg border border-white/30 text-white">
-//                             <p className="font-bold">{selectedAddress.detailAlamat}</p>
-//                             <p className="text-sm text-slate-300">{selectedAddress.kelurahan}, {selectedAddress.kecamatan}</p>
-//                             <p className="text-sm text-slate-300">{selectedAddress.kabupaten}, {selectedAddress.provinsi}</p>
-//                         </div>
-//                     ) : (
-//                         <p className="text-slate-400">Memuat alamat...</p>
-//                     )}
-//                 </div>
-
-//                 <div className="my-6">
-//                     <h2 className="block font-semibold mb-2 text-lg">Opsi Pengiriman</h2>
-//                     {loadingShipping ? <p className="text-slate-300">Menghitung ongkir...</p> : (
-//                         <div className="space-y-2">
-//                             {shippingOptions.map(opt => (
-//                                 <div key={opt.service} onClick={() => handleSelectShipping(opt)} className={`p-3 rounded-lg border cursor-pointer transition ${selectedShipping?.service === opt.service ? 'bg-emerald-500/30 border-emerald-400' : 'bg-white/10 border-white/30'}`}>
-//                                     <p className="font-bold">{`JNE ${opt.service}`} ({formatIDR(opt.cost)})</p>
-//                                     <p className="text-sm text-slate-300">Estimasi Tiba: {opt.etd} hari</p>
-//                                 </div>
-//                             ))}
-//                         </div>
-//                     )}
-//                 </div>
-
-                
-
-//                 <div className="text-left my-6 space-y-2 border-t border-white/20 pt-4">
-//                     <p className="flex justify-between text-lg">
-//                         <span className="font-bold">Subtotal:</span> 
-//                         <span className="font-bold">{formatIDR(itemsToCheckout.reduce((total, item) => total + (item.product.sellPrice * item.quantity), 0))}</span>
-//                     </p>
-//                     <p className="flex justify-between text-lg">
-//                         <span className="font-bold">Ongkos Kirim:</span> 
-//                         <span className="font-bold">{formatIDR(shippingCost)}</span>
-//                     </p>
-//                     <p className="flex justify-between mt-2 text-xl">
-//                         <span className="font-bold">Total Bayar:</span> 
-//                         <span className="font-bold">{formatIDR(calculateTotal())}</span>
-//                     </p>
-//                 </div>
-                
-//                 <button 
-//                     onClick={handlePayment}
-//                     className="w-full bg-white text-[#183D4B] font-bold py-3 px-6 rounded-lg transition hover:bg-slate-200"
-//                     disabled={loadingShipping || !selectedShipping}
-//                 >
-//                     Bayar Sekarang
-//                 </button>
-//             </div>
-//         </div>
-//     );
-// }
-
-// import React, { useState, useEffect } from 'react';
-// import { useNavigate } from 'react-router-dom';
-
-// function formatIDR(value) {
-//     const n = Number(value || 0);
-//     return new Intl.NumberFormat("id-ID", {
-//         style: "currency",
-//         currency: "IDR",
-//         maximumFractionDigits: 0,
-//     }).format(isNaN(n) ? 0 : n);
-// }
-
-// const API_BASE_URL = 'http://localhost:8080/api';
-
-// // ID Tetap untuk lokasi asal pengiriman (Toko Anda)
-// const ID_ASAL_TOKO = '4835';
-
-// export default function CheckoutPage() {
-//     const navigate = useNavigate();
-//     const [itemsToCheckout, setItemsToCheckout] = useState([]);
-//     const [selectedAddress, setSelectedAddress] = useState(null);
-//     const [loading, setLoading] = useState(true);
-    
-//     const loggedInUserId = localStorage.getItem('loggedInUserId');
-
-//     const [shippingOptions, setShippingOptions] = useState([]);
-//     const [selectedShipping, setSelectedShipping] = useState(null);
-//     const [shippingCost, setShippingCost] = useState(0);
-//     const [loadingShipping, setLoadingShipping] = useState(false);
-
-//     useEffect(() => {
-//         if (!loggedInUserId) {
-//             alert("Sesi tidak ditemukan, silakan login.");
-//             navigate('/');
-//             return;
-//         }
-
-//         const cartKey = `itemsToCheckout_${loggedInUserId}`;
-//         const itemsJSON = localStorage.getItem(cartKey);
-//         if (!itemsJSON || JSON.parse(itemsJSON).length === 0) {
-//             alert("Tidak ada item yang dipilih untuk checkout.");
-//             navigate('/CartPage');
-//             return;
-//         }
-//         setItemsToCheckout(JSON.parse(itemsJSON));
-
-//         const addressKey = `selectedAddress_${loggedInUserId}`;
-//         const addressJSON = localStorage.getItem(addressKey);
-//         if (!addressJSON) {
-//             navigate('/AddressForm');
-//             return;
-//         }
-//         setSelectedAddress(JSON.parse(addressJSON));
-        
-//         setLoading(false);
-
-//     }, [loggedInUserId, navigate]);
-
-//       useEffect(() => {
-//         if (selectedAddress && itemsToCheckout.length > 0) {
-//             const calculateOngkir = async () => {
-//                 setLoadingShipping(true);
-//                 setShippingOptions([]);
-//                 setSelectedShipping(null);
-//                 setShippingCost(0);
-                
-//                 // PASTIKAN OBJEK ALAMAT ANDA MEMILIKI FIELD `id` YANG MENYIMPAN ID TUJUAN DARI KOMERCE
-//                 const destinationId = selectedAddress.id;
-                
-//                 if (!destinationId) {
-//                     console.error("Alamat yang dipilih tidak memiliki ID tujuan.");
-//                     alert("Alamat yang dipilih tidak memiliki ID tujuan. Harap perbarui alamat Anda.");
-//                     setLoadingShipping(false);
-//                     return;
-//                 }
-
-//                 const totalWeight = itemsToCheckout.reduce((total, item) => total + (item.product.weight || 100) * item.quantity, 0);
-                
-//                 if (totalWeight > 0) {
-//                     try {
-//                         // 1. Membuat payload untuk dikirim
-//                         const payload = { 
-//                             origin: ID_ASAL_TOKO, 
-//                             destination: destinationId.toString(), 
-//                             weight: totalWeight, 
-//                             courier: "jne" 
-//                         };
-
-//                         // 2. Mengubah payload menjadi format form-urlencoded
-//                         const formBody = new URLSearchParams(payload);
-
-//                         // 3. Mengirim request dengan header & body yang benar ke backend Anda
-//                         const res = await fetch(`${API_BASE_URL}/shipping/cost`, {
-//                             method: 'POST',
-//                             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-//                             body: formBody
-//                         });
-
-//                         if (!res.ok) {
-//                             const errorData = await res.json().catch(() => ({ error: "Gagal memproses respons error dari server." }));
-//                             throw new Error(errorData.error || `Gagal mengambil ongkir: Status ${res.status}`);
-//                         }
-
-//                         const data = await res.json();
-//                         setShippingOptions(data);
-
-//                     } catch (err) {
-//                         console.error("Gagal mengambil ongkir:", err);
-//                         alert(err.message);
-//                     } finally {
-//                         setLoadingShipping(false);
-//                     }
-//                 } else {
-//                     setLoadingShipping(false);
-//                 }
-//             };
-//             calculateOngkir();
-//         }
-//     }, [selectedAddress, itemsToCheckout]);
-    
-//     const calculateTotal = () => {
-//         const subtotal = itemsToCheckout.reduce((total, item) => total + (item.product.sellPrice * item.quantity), 0);
-//         return subtotal + shippingCost;
-//     };
-
-//     const handleSelectShipping = (option) => {
-//         setSelectedShipping(option);
-//         setShippingCost(option.cost);
-//     };
-
-//     const handlePayment = async () => {
-//         if (!selectedAddress) {
-//             alert("Alamat pengiriman tidak valid.");
-//             return;
-//         }
-//         if (!selectedShipping) {
-//             alert("Silakan pilih opsi pengiriman terlebih dahulu.");
-//             return;
-//         }
-//         const totalAmount = calculateTotal();
-//         try {
-//             const response = await fetch(`${API_BASE_URL}/payments/create-transaction`, {
-//                 method: 'POST',
-//                 headers: { 'Content-Type': 'application/json' },
-//                 body: JSON.stringify({ 
-//                     amount: totalAmount,
-//                     pelangganId: loggedInUserId 
-//                 }),
-//             });
-            
-//             if (!response.ok) {
-//                 const errorData = await response.json().catch(() => ({}));
-//                 throw new Error(errorData.error || "Gagal membuat transaksi di backend.");
-//             }
-
-//             const data = await response.json();
-//             const { token } = data;
-//             if (!token) {
-//                 alert('Gagal mendapatkan token pembayaran.');
-//                 return;
-//             }
-
-//             window.snap.pay(token, {
-//                 onSuccess: (result) => {
-//                     console.log('SUCCESS', result);
-//                     alert('Pembayaran Berhasil!');
-//                     const cartKey = `itemsToCheckout_${loggedInUserId}`;
-//                     const addressKey = `selectedAddress_${loggedInUserId}`;
-//                     localStorage.removeItem(cartKey);
-//                     localStorage.removeItem(addressKey);
-//                     navigate('/Transaksi'); 
-//                 },
-//                 onPending: (result) => {
-//                     console.log('PENDING', result);
-//                     alert('Menunggu pembayaran Anda...');
-//                     const cartKey = `itemsToCheckout_${loggedInUserId}`;
-//                     const addressKey = `selectedAddress_${loggedInUserId}`;
-//                     localStorage.removeItem(cartKey);
-//                     localStorage.removeItem(addressKey);
-//                     navigate('/CartPage'); 
-//                 },
-//                 onError: (result) => {
-//                     console.log('ERROR', result);
-//                     alert('Pembayaran Gagal!');
-//                 },
-//                 onClose: () => {
-//                     console.log('Anda menutup pop-up pembayaran.');
-//                 }
-//             });
-//         } catch (error) {
-//             console.error('Error saat proses pembayaran:', error);
-//             alert('Terjadi kesalahan: ' + error.message);
-//         }
-//     };
-
-//     if (loading) return <div className="min-h-screen bg-[#183D4B] text-white flex justify-center items-center">Mempersiapkan Checkout...</div>;
-
-//     return (
-//         <div className="min-h-screen bg-[#183D4B] p-10 text-white flex justify-center items-center">
-//             <div className="w-full max-w-lg bg-white/10 p-8 rounded-2xl shadow-2xl">
-//                 <h1 className="text-3xl font-bold mb-6">Ringkasan Checkout</h1>
-                
-//                 <div className="space-y-2 max-h-48 overflow-y-auto pr-2 mb-4 border-b border-white/20 pb-4">
-//                     <h2 className="font-semibold text-lg mb-2">Produk yang Dipesan</h2>
-//                     {itemsToCheckout.map(item => (
-//                         <div key={item.id} className="flex justify-between text-slate-300">
-//                             <span>{item.product.name} (x{item.quantity})</span>
-//                             <span>{formatIDR(item.product.sellPrice * item.quantity)}</span>
-//                         </div>
-//                     ))}
-//                 </div>
-                
-//                 <div className="my-6">
-//                     <h2 className="block font-semibold mb-2 text-lg">Alamat Pengiriman</h2>
-//                     {selectedAddress ? (
-//                         <div className="bg-white/20 p-4 rounded-lg border border-white/30 text-white">
-//                             <p className="font-bold">{selectedAddress.detailAlamat}</p>
-//                             <p className="text-sm text-slate-300">{selectedAddress.kelurahan}, {selectedAddress.kecamatan}</p>
-//                             <p className="text-sm text-slate-300">{selectedAddress.kabupaten}, {selectedAddress.provinsi}</p>
-//                         </div>
-//                     ) : (
-//                         <p className="text-slate-400">Memuat alamat...</p>
-//                     )}
-//                 </div>
-
-//                 <div className="my-6">
-//                     <h2 className="block font-semibold mb-2 text-lg">Opsi Pengiriman</h2>
-//                     {loadingShipping ? <p className="text-slate-300">Menghitung ongkir...</p> : (
-//                         <div className="space-y-2">
-//                             {shippingOptions.length > 0 ? shippingOptions.map(opt => (
-//                                 <div key={opt.service} onClick={() => handleSelectShipping(opt)} className={`p-3 rounded-lg border cursor-pointer transition ${selectedShipping?.service === opt.service ? 'bg-emerald-500/30 border-emerald-400' : 'bg-white/10 border-white/30 hover:bg-white/20'}`}>
-//                                     <p className="font-bold">{`${opt.courier_name} ${opt.service}`} ({formatIDR(opt.cost)})</p>
-//                                     <p className="text-sm text-slate-300">Estimasi Tiba: {opt.etd} hari</p>
-//                                 </div>
-//                             )) : <p className="text-slate-400 text-sm">Tidak ada opsi pengiriman tersedia.</p>}
-//                         </div>
-//                     )}
-//                 </div>
-
-//                 <div className="text-left my-6 space-y-2 border-t border-white/20 pt-4">
-//                     <p className="flex justify-between text-lg">
-//                         <span className="font-bold">Subtotal:</span> 
-//                         <span className="font-bold">{formatIDR(itemsToCheckout.reduce((total, item) => total + (item.product.sellPrice * item.quantity), 0))}</span>
-//                     </p>
-//                     <p className="flex justify-between text-lg">
-//                         <span className="font-bold">Ongkos Kirim:</span> 
-//                         <span className="font-bold">{formatIDR(shippingCost)}</span>
-//                     </p>
-//                     <p className="flex justify-between mt-2 text-xl">
-//                         <span className="font-bold">Total Bayar:</span> 
-//                         <span className="font-bold">{formatIDR(calculateTotal())}</span>
-//                     </p>
-//                 </div>
-                
-//                 <button 
-//                     onClick={handlePayment}
-//                     className="w-full bg-white text-[#183D4B] font-bold py-3 px-6 rounded-lg transition hover:bg-slate-200 disabled:bg-slate-400 disabled:cursor-not-allowed"
-//                     disabled={loadingShipping || !selectedShipping}
-//                 >
-//                     Bayar Sekarang
-//                 </button>
-//             </div>
-//         </div>
-//     );
-// }
-
-
-// import React, { useState, useEffect } from 'react';
-// import { useNavigate } from 'react-router-dom';
-
-// function formatIDR(value) {
-//     const n = Number(value || 0);
-//     return new Intl.NumberFormat("id-ID", {
-//         style: "currency",
-//         currency: "IDR",
-//         maximumFractionDigits: 0,
-//     }).format(isNaN(n) ? 0 : n);
-// }
-
-// const API_BASE_URL = 'http://localhost:8080/api';
-
-// // ID Tetap untuk lokasi asal pengiriman (Toko Anda) - Ganti jika perlu
-// const ID_ASAL_TOKO = '4835';
-
-// export default function CheckoutPage() {
-//     const navigate = useNavigate();
-//     const [itemsToCheckout, setItemsToCheckout] = useState([]);
-//     const [selectedAddress, setSelectedAddress] = useState(null);
-//     const [loading, setLoading] = useState(true);
-    
-//     const loggedInUserId = localStorage.getItem('loggedInUserId');
-
-//     const [shippingOptions, setShippingOptions] = useState([]);
-//     const [selectedShipping, setSelectedShipping] = useState(null);
-//     const [shippingCost, setShippingCost] = useState(0);
-//     const [loadingShipping, setLoadingShipping] = useState(false);
-
-//     useEffect(() => {
-//         if (!loggedInUserId) {
-//             alert("Sesi tidak ditemukan, silakan login.");
-//             navigate('/');
-//             return;
-//         }
-
-//         const cartKey = `itemsToCheckout_${loggedInUserId}`;
-//         const itemsJSON = localStorage.getItem(cartKey);
-//         if (!itemsJSON || JSON.parse(itemsJSON).length === 0) {
-//             alert("Tidak ada item yang dipilih untuk checkout.");
-//             navigate('/CartPage');
-//             return;
-//         }
-//         setItemsToCheckout(JSON.parse(itemsJSON));
-
-//         const addressKey = `selectedAddress_${loggedInUserId}`;
-//         const addressJSON = localStorage.getItem(addressKey);
-//         if (!addressJSON) {
-//             navigate('/AddressForm');
-//             return;
-//         }
-//         setSelectedAddress(JSON.parse(addressJSON));
-        
-//         setLoading(false);
-
-//     }, [loggedInUserId, navigate]);
-
-//       useEffect(() => {
-//         if (selectedAddress && itemsToCheckout.length > 0) {
-//             const calculateOngkir = async () => {
-//                 setLoadingShipping(true);
-//                 setShippingOptions([]);
-//                 setSelectedShipping(null);
-//                 setShippingCost(0);
-                
-//                 // --- PERUBAHAN UTAMA DI SINI ---
-//                 // Memeriksa apakah alamat yang dipilih memiliki 'destinationId'
-//                 // Sesuaikan 'destinationId' jika nama field di objek alamat Anda berbeda
-//                 const destinationId = selectedAddress.destinationId;
-                
-//                 // Jika tidak ada ID (alamat lama), tampilkan pesan dan hentikan proses
-//                 if (!destinationId) {
-//                     console.error("Alamat yang dipilih tidak memiliki ID tujuan (destinationId). Alamat ini mungkin perlu diperbarui.");
-//                     alert("Alamat ini perlu diperbarui untuk menghitung ongkos kirim. Silakan lengkapi alamat Anda di halaman profil.");
-//                     setLoadingShipping(false);
-//                     return; // Menghentikan fungsi agar tidak lanjut ke fetch
-//                 }
-//                 // --- AKHIR PERUBAHAN ---
-
-//                 const totalWeight = itemsToCheckout.reduce((total, item) => total + (item.product.weight || 100) * item.quantity, 0);
-                
-//                 if (totalWeight > 0) {
-//                     try {
-//                         const payload = { 
-//                             origin: ID_ASAL_TOKO, 
-//                             destination: destinationId.toString(), 
-//                             weight: totalWeight, 
-//                             courier: "jne" 
-//                         };
-
-//                         const formBody = new URLSearchParams(payload);
-
-//                         const res = await fetch(`${API_BASE_URL}/shipping/cost`, {
-//                             method: 'POST',
-//                             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-//                             body: formBody
-//                         });
-
-//                         if (!res.ok) {
-//                             const errorData = await res.json().catch(() => ({ error: "Gagal memproses respons error dari server." }));
-//                             throw new Error(errorData.error || `Gagal mengambil ongkir: Status ${res.status}`);
-//                         }
-
-//                         const data = await res.json();
-//                         setShippingOptions(data);
-
-//                     } catch (err) {
-//                         console.error("Gagal mengambil ongkir:", err);
-//                         alert(err.message);
-//                     } finally {
-//                         setLoadingShipping(false);
-//                     }
-//                 } else {
-//                     setLoadingShipping(false);
-//                 }
-//             };
-//             calculateOngkir();
-//         }
-//     }, [selectedAddress, itemsToCheckout]);
-    
-//     const calculateTotal = () => {
-//         const subtotal = itemsToCheckout.reduce((total, item) => total + (item.product.sellPrice * item.quantity), 0);
-//         return subtotal + shippingCost;
-//     };
-
-//     const handleSelectShipping = (option) => {
-//         setSelectedShipping(option);
-//         setShippingCost(option.cost);
-//     };
-
-//     const handlePayment = async () => {
-//         if (!selectedAddress) {
-//             alert("Alamat pengiriman tidak valid.");
-//             return;
-//         }
-//         if (!selectedShipping) {
-//             alert("Silakan pilih opsi pengiriman terlebih dahulu.");
-//             return;
-//         }
-//         const totalAmount = calculateTotal();
-//         try {
-//             const response = await fetch(`${API_BASE_URL}/payments/create-transaction`, {
-//                 method: 'POST',
-//                 headers: { 'Content-Type': 'application/json' },
-//                 body: JSON.stringify({ 
-//                     amount: totalAmount,
-//                     pelangganId: loggedInUserId 
-//                 }),
-//             });
-            
-//             if (!response.ok) {
-//                 const errorData = await response.json().catch(() => ({}));
-//                 throw new Error(errorData.error || "Gagal membuat transaksi di backend.");
-//             }
-
-//             const data = await response.json();
-//             const { token } = data;
-//             if (!token) {
-//                 alert('Gagal mendapatkan token pembayaran.');
-//                 return;
-//             }
-
-//             window.snap.pay(token, {
-//                 onSuccess: (result) => {
-//                     console.log('SUCCESS', result);
-//                     alert('Pembayaran Berhasil!');
-//                     const cartKey = `itemsToCheckout_${loggedInUserId}`;
-//                     const addressKey = `selectedAddress_${loggedInUserId}`;
-//                     localStorage.removeItem(cartKey);
-//                     localStorage.removeItem(addressKey);
-//                     navigate('/Transaksi'); 
-//                 },
-//                 onPending: (result) => {
-//                     console.log('PENDING', result);
-//                     alert('Menunggu pembayaran Anda...');
-//                     const cartKey = `itemsToCheckout_${loggedInUserId}`;
-//                     const addressKey = `selectedAddress_${loggedInUserId}`;
-//                     localStorage.removeItem(cartKey);
-//                     localStorage.removeItem(addressKey);
-//                     navigate('/CartPage'); 
-//                 },
-//                 onError: (result) => {
-//                     console.log('ERROR', result);
-//                     alert('Pembayaran Gagal!');
-//                 },
-//                 onClose: () => {
-//                     console.log('Anda menutup pop-up pembayaran.');
-//                 }
-//             });
-//         } catch (error) {
-//             console.error('Error saat proses pembayaran:', error);
-//             alert('Terjadi kesalahan: ' + error.message);
-//         }
-//     };
-
-//     if (loading) return <div className="min-h-screen bg-[#183D4B] text-white flex justify-center items-center">Mempersiapkan Checkout...</div>;
-
-//     return (
-//         <div className="min-h-screen bg-[#183D4B] p-10 text-white flex justify-center items-center">
-//             <div className="w-full max-w-lg bg-white/10 p-8 rounded-2xl shadow-2xl">
-//                 <h1 className="text-3xl font-bold mb-6">Ringkasan Checkout</h1>
-                
-//                 <div className="space-y-2 max-h-48 overflow-y-auto pr-2 mb-4 border-b border-white/20 pb-4">
-//                     <h2 className="font-semibold text-lg mb-2">Produk yang Dipesan</h2>
-//                     {itemsToCheckout.map(item => (
-//                         <div key={item.id} className="flex justify-between text-slate-300">
-//                             <span>{item.product.name} (x{item.quantity})</span>
-//                             <span>{formatIDR(item.product.sellPrice * item.quantity)}</span>
-//                         </div>
-//                     ))}
-//                 </div>
-                
-//                 <div className="my-6">
-//                     <h2 className="block font-semibold mb-2 text-lg">Alamat Pengiriman</h2>
-//                     {selectedAddress ? (
-//                         <div className="bg-white/20 p-4 rounded-lg border border-white/30 text-white">
-//                             <p className="font-bold">{selectedAddress.detailAlamat}</p>
-//                             <p className="text-sm text-slate-300">{selectedAddress.kelurahan}, {selectedAddress.kecamatan}</p>
-//                             <p className="text-sm text-slate-300">{selectedAddress.kabupaten}, {selectedAddress.provinsi}</p>
-//                         </div>
-//                     ) : (
-//                         <p className="text-slate-400">Memuat alamat...</p>
-//                     )}
-//                 </div>
-
-//                 <div className="my-6">
-//                     <h2 className="block font-semibold mb-2 text-lg">Opsi Pengiriman</h2>
-//                     {loadingShipping ? <p className="text-slate-300">Menghitung ongkir...</p> : (
-//                         <div className="space-y-2">
-//                             {shippingOptions.length > 0 ? shippingOptions.map(opt => (
-//                                 <div key={opt.service} onClick={() => handleSelectShipping(opt)} className={`p-3 rounded-lg border cursor-pointer transition ${selectedShipping?.service === opt.service ? 'bg-emerald-500/30 border-emerald-400' : 'bg-white/10 border-white/30 hover:bg-white/20'}`}>
-//                                     <p className="font-bold">{`${opt.courier_name} ${opt.service}`} ({formatIDR(opt.cost)})</p>
-//                                     <p className="text-sm text-slate-300">Estimasi Tiba: {opt.etd} hari</p>
-//                                 </div>
-//                             )) : <p className="text-slate-400 text-sm">Tidak ada opsi pengiriman tersedia.</p>}
-//                         </div>
-//                     )}
-//                 </div>
-
-//                 <div className="text-left my-6 space-y-2 border-t border-white/20 pt-4">
-//                     <p className="flex justify-between text-lg">
-//                         <span className="font-bold">Subtotal:</span> 
-//                         <span className="font-bold">{formatIDR(itemsToCheckout.reduce((total, item) => total + (item.product.sellPrice * item.quantity), 0))}</span>
-//                     </p>
-//                     <p className="flex justify-between text-lg">
-//                         <span className="font-bold">Ongkos Kirim:</span> 
-//                         <span className="font-bold">{formatIDR(shippingCost)}</span>
-//                     </p>
-//                     <p className="flex justify-between mt-2 text-xl">
-//                         <span className="font-bold">Total Bayar:</span> 
-//                         <span className="font-bold">{formatIDR(calculateTotal())}</span>
-//                     </p>
-//                 </div>
-                
-//                 <button 
-//                     onClick={handlePayment}
-//                     className="w-full bg-white text-[#183D4B] font-bold py-3 px-6 rounded-lg transition hover:bg-slate-200 disabled:bg-slate-400 disabled:cursor-not-allowed"
-//                     disabled={loadingShipping || !selectedShipping}
-//                 >
-//                     Bayar Sekarang
-//                 </button>
-//             </div>
-//         </div>
-//     );
-// }
-
-
-// import React, { useState, useEffect } from 'react';
-// import { useNavigate } from 'react-router-dom';
-
-// function formatIDR(value) {
-//     const n = Number(value || 0);
-//     return new Intl.NumberFormat("id-ID", {
-//         style: "currency",
-//         currency: "IDR",
-//         maximumFractionDigits: 0,
-//     }).format(isNaN(n) ? 0 : n);
-// }
-
-// const API_BASE_URL = 'http://localhost:8080/api';
-
-// export default function CheckoutPage() {
-//     const navigate = useNavigate();
-//     const [itemsToCheckout, setItemsToCheckout] = useState([]);
-//     const [selectedAddress, setSelectedAddress] = useState(null);
-//     const [loading, setLoading] = useState(true);
-    
-//     const loggedInUserId = localStorage.getItem('loggedInUserId');
-
-//     // --- LOGIKA ONGKIR DIHAPUS ---
-//     // Semua state terkait shipping (shippingOptions, selectedShipping, dll) telah dihapus.
-//     // Ongkos kirim sekarang dianggap 0.
-
-//     useEffect(() => {
-//         if (!loggedInUserId) {
-//             alert("Sesi tidak ditemukan, silakan login.");
-//             navigate('/');
-//             return;
-//         }
-
-//         const cartKey = `itemsToCheckout_${loggedInUserId}`;
-//         const itemsJSON = localStorage.getItem(cartKey);
-//         if (!itemsJSON || JSON.parse(itemsJSON).length === 0) {
-//             alert("Tidak ada item yang dipilih untuk checkout.");
-//             navigate('/CartPage');
-//             return;
-//         }
-//         setItemsToCheckout(JSON.parse(itemsJSON));
-
-//         const addressKey = `selectedAddress_${loggedInUserId}`;
-//         const addressJSON = localStorage.getItem(addressKey);
-//         if (!addressJSON) {
-//             // Arahkan ke halaman pemilihan alamat jika belum ada yang dipilih
-//             navigate('/AddressListPage');
-//             return;
-//         }
-//         setSelectedAddress(JSON.parse(addressJSON));
-        
-//         setLoading(false);
-
-//     }, [loggedInUserId, navigate]);
-
-//     // Fungsi useEffect untuk menghitung ongkir telah dihapus sepenuhnya.
-
-//     const calculateTotal = () => {
-//         const subtotal = itemsToCheckout.reduce((total, item) => total + (item.product.sellPrice * item.quantity), 0);
-//         // Ongkos kirim (shippingCost) sekarang 0, jadi tidak perlu ditambahkan.
-//         return subtotal;
-//     };
-
-//     // Fungsi handleSelectShipping telah dihapus.
-
-//     const handlePayment = async () => {
-//         if (!selectedAddress) {
-//             alert("Alamat pengiriman tidak valid.");
-//             return;
-//         }
-
-//         // Pengecekan terhadap selectedShipping telah dihapus.
-
-//         const totalAmount = calculateTotal();
-//         try {
-//             const response = await fetch(`${API_BASE_URL}/payments/create-transaction`, {
-//                 method: 'POST',
-//                 headers: { 'Content-Type': 'application/json' },
-//                 body: JSON.stringify({ 
-//                     amount: totalAmount,
-//                     pelangganId: loggedInUserId 
-//                 }),
-//             });
-            
-//             if (!response.ok) {
-//                 const errorData = await response.json().catch(() => ({}));
-//                 throw new Error(errorData.error || "Gagal membuat transaksi di backend.");
-//             }
-
-//             const data = await response.json();
-//             const { token } = data;
-//             if (!token) {
-//                 alert('Gagal mendapatkan token pembayaran.');
-//                 return;
-//             }
-
-//             window.snap.pay(token, {
-//                 onSuccess: (result) => {
-//                     console.log('SUCCESS', result);
-//                     alert('Pembayaran Berhasil!');
-//                     const cartKey = `itemsToCheckout_${loggedInUserId}`;
-//                     const addressKey = `selectedAddress_${loggedInUserId}`;
-//                     localStorage.removeItem(cartKey);
-//                     localStorage.removeItem(addressKey);
-//                     navigate('/Transaksi'); 
-//                 },
-//                 onPending: (result) => {
-//                     console.log('PENDING', result);
-//                     alert('Menunggu pembayaran Anda...');
-//                     const cartKey = `itemsToCheckout_${loggedInUserId}`;
-//                     const addressKey = `selectedAddress_${loggedInUserId}`;
-//                     localStorage.removeItem(cartKey);
-//                     localStorage.removeItem(addressKey);
-//                     navigate('/CartPage'); 
-//                 },
-//                 onError: (result) => {
-//                     console.log('ERROR', result);
-//                     alert('Pembayaran Gagal!');
-//                 },
-//                 onClose: () => {
-//                     console.log('Anda menutup pop-up pembayaran.');
-//                 }
-//             });
-//         } catch (error) {
-//             console.error('Error saat proses pembayaran:', error);
-//             alert('Terjadi kesalahan: ' + error.message);
-//         }
-//     };
-
-//     if (loading) return <div className="min-h-screen bg-[#183D4B] text-white flex justify-center items-center">Mempersiapkan Checkout...</div>;
-
-//     return (
-//         <div className="min-h-screen bg-[#183D4B] p-10 text-white flex justify-center items-center">
-//             <div className="w-full max-w-lg bg-white/10 p-8 rounded-2xl shadow-2xl">
-//                 <h1 className="text-3xl font-bold mb-6">Ringkasan Checkout</h1>
-                
-//                 <div className="space-y-2 max-h-48 overflow-y-auto pr-2 mb-4 border-b border-white/20 pb-4">
-//                     <h2 className="font-semibold text-lg mb-2">Produk yang Dipesan</h2>
-//                     {itemsToCheckout.map(item => (
-//                         <div key={item.id} className="flex justify-between text-slate-300">
-//                             <span>{item.product.name} (x{item.quantity})</span>
-//                             <span>{formatIDR(item.product.sellPrice * item.quantity)}</span>
-//                         </div>
-//                     ))}
-//                 </div>
-                
-//                 <div className="my-6">
-//                     <h2 className="block font-semibold mb-2 text-lg">Alamat Pengiriman</h2>
-//                     {selectedAddress ? (
-//                         <div className="bg-white/20 p-4 rounded-lg border border-white/30 text-white">
-//                             <p className="font-bold">{selectedAddress.detailAlamat}</p>
-//                             <p className="text-sm text-slate-300">{selectedAddress.kelurahan}, {selectedAddress.kecamatan}</p>
-//                             <p className="text-sm text-slate-300">{selectedAddress.kabupaten}, {selectedAddress.provinsi}</p>
-//                         </div>
-//                     ) : (
-//                         <p className="text-slate-400">Memuat alamat...</p>
-//                     )}
-//                 </div>
-
-//                 {/* --- BAGIAN OPSI PENGIRIMAN DIHAPUS --- */}
-//                 {/* Tampilan opsi pengiriman tidak lagi ditampilkan kepada pengguna. */}
-
-//                 <div className="text-left my-6 space-y-2 border-t border-white/20 pt-4">
-//                     <p className="flex justify-between text-lg">
-//                         <span className="font-bold">Subtotal:</span> 
-//                         <span className="font-bold">{formatIDR(itemsToCheckout.reduce((total, item) => total + (item.product.sellPrice * item.quantity), 0))}</span>
-//                     </p>
-//                     <p className="flex justify-between text-lg">
-//                         <span className="font-bold">Ongkos Kirim:</span> 
-//                         {/* Nilai ongkos kirim di-hardcode menjadi 0 */}
-//                         <span className="font-bold">{formatIDR(0)}</span>
-//                     </p>
-//                     <p className="flex justify-between mt-2 text-xl">
-//                         <span className="font-bold">Total Bayar:</span> 
-//                         <span className="font-bold">{formatIDR(calculateTotal())}</span>
-//                     </p>
-//                 </div>
-                
-//                 <button 
-//                     onClick={handlePayment}
-//                     className="w-full bg-white text-[#183D4B] font-bold py-3 px-6 rounded-lg transition hover:bg-slate-200"
-//                     // Logika 'disabled' yang berhubungan dengan shipping telah dihapus
-//                 >
-//                     Bayar Sekarang
-//                 </button>
-//             </div>
-//         </div>
-//     );
-// }
-
-
-
-
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-
-function formatIDR(value) {
-    const n = Number(value || 0);
-    return new Intl.NumberFormat("id-ID", {
-        style: "currency",
-        currency: "IDR",
-        maximumFractionDigits: 0,
-    }).format(isNaN(n) ? 0 : n);
-}
-
-const API_BASE_URL = 'http://localhost:8080/api';
-
+import React, { useCallback, useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import ShopLayout from "../components/ShopLayout";
+import {
+  AreaTeks, Chip, Galat, Isian, JudulHalaman, Kartu, KartuJudul, Kosong,
+  Memuat, Pilihan, Tombol,
+} from "../components/ui";
+import { alamatApi, muatSnap, pembayaranApi, pengirimanApi, pesananApi, urlBerkas } from "../lib/api";
+import { rupiah } from "../lib/format";
+import { pelangganId } from "../lib/session";
+
+/**
+ * Checkout.
+ *
+ * Ongkos kirim di sini bukan angka tetap, melainkan tarif nyata dari kurir
+ * lewat RajaOngkir, dihitung dari alamat toko ke alamat pelanggan berdasarkan
+ * berat total barangnya.
+ *
+ * Urutannya: hitung ongkir, simpan pesanan lengkap, baru minta token
+ * pembayaran. Status lunas tidak pernah ditentukan browser — setelah popup
+ * ditutup, backend yang menanyakan hasilnya ke Midtrans.
+ */
 export default function CheckoutPage() {
-    const navigate = useNavigate();
-    const [itemsToCheckout, setItemsToCheckout] = useState([]);
-    const [selectedAddress, setSelectedAddress] = useState(null);
-    const [loading, setLoading] = useState(true);
-    
-    const loggedInUserId = localStorage.getItem('loggedInUserId');
+  const navigate = useNavigate();
+  const id = pelangganId();
 
-    // --- LOGIKA ONGKIR DIHAPUS ---
-    // Semua state terkait shipping (shippingOptions, selectedShipping, dll) telah dihapus.
-    // Ongkos kirim sekarang dianggap 0.
+  const [items, setItems] = useState([]);
+  const [alamat, setAlamat] = useState([]);
+  const [alamatDipilih, setAlamatDipilih] = useState("");
+  const [infoToko, setInfoToko] = useState(null);
 
-    useEffect(() => {
-        if (!loggedInUserId) {
-            alert("Sesi tidak ditemukan, silakan login.");
-            navigate('/');
-            return;
-        }
+  const [opsiKirim, setOpsiKirim] = useState([]);
+  const [kirimDipilih, setKirimDipilih] = useState(null);
+  const [memuatOngkir, setMemuatOngkir] = useState(false);
+  const [galatOngkir, setGalatOngkir] = useState("");
 
-        const cartKey = `itemsToCheckout_${loggedInUserId}`;
-        const itemsJSON = localStorage.getItem(cartKey);
-        if (!itemsJSON || JSON.parse(itemsJSON).length === 0) {
-            alert("Tidak ada item yang dipilih untuk checkout.");
-            navigate('/CartPage');
-            return;
-        }
-        setItemsToCheckout(JSON.parse(itemsJSON));
+  const [catatan, setCatatan] = useState("");
+  const [memuat, setMemuat] = useState(true);
+  const [galat, setGalat] = useState("");
+  const [proses, setProses] = useState(false);
+  const [langkah, setLangkah] = useState("");
 
-        const addressKey = `selectedAddress_${loggedInUserId}`;
-        const addressJSON = localStorage.getItem(addressKey);
-        if (!addressJSON) {
-            // Arahkan ke halaman pemilihan alamat jika belum ada yang dipilih
-            navigate('/AddressListPage');
-            return;
-        }
-        setSelectedAddress(JSON.parse(addressJSON));
-        
-        setLoading(false);
+  const beratTotal = items.reduce(
+    (t, i) => t + (Number(i.weight) || 0) * i.quantity,
+    0
+  );
+  const subtotal = items.reduce((t, i) => t + i.sellPrice * i.quantity, 0);
+  const ongkir = kirimDipilih ? kirimDipilih.ongkir : 0;
+  const total = subtotal + ongkir;
 
-    }, [loggedInUserId, navigate]);
+  const alamatAktif = alamat.find((a) => String(a.id) === String(alamatDipilih));
 
-    // Fungsi useEffect untuk menghitung ongkir telah dihapus sepenuhnya.
+  useEffect(() => {
+    if (!id) {
+      navigate("/LoginPelanggan");
+      return;
+    }
+    const mentah = localStorage.getItem(`itemsToCheckout_${id}`);
+    const dipilih = mentah ? JSON.parse(mentah) : [];
+    setItems(dipilih);
 
-    const calculateTotal = () => {
-        const subtotal = itemsToCheckout.reduce((total, item) => total + (item.product.sellPrice * item.quantity), 0);
-        // Ongkos kirim (shippingCost) sekarang 0, jadi tidak perlu ditambahkan.
-        return subtotal;
-    };
+    Promise.all([alamatApi.milik(id), pengirimanApi.info().catch(() => null)])
+      .then(([a, info]) => {
+        setAlamat(a);
+        setInfoToko(info);
+        const utama = a.find((x) => x.destinationId) || a[0];
+        if (utama) setAlamatDipilih(String(utama.id));
+      })
+      .catch((e) => setGalat(e.message))
+      .finally(() => setMemuat(false));
+  }, [id, navigate]);
 
-    // Fungsi handleSelectShipping telah dihapus.
+  // Setiap kali alamat berubah, tarif dihitung ulang ke kurir.
+  const hitungOngkir = useCallback(async () => {
+    if (!alamatAktif) return;
+    // Alamat tanpa titik kirim kurir tetap dikirim ke backend. Backend
+    // menjawabnya dengan tarif perkiraan toko, jadi pembeli tidak terjebak
+    // tanpa satu pun pilihan pengiriman.
+    setMemuatOngkir(true);
+    setGalatOngkir("");
+    setKirimDipilih(null);
+    try {
+      const hasil = await pengirimanApi.ongkir(alamatAktif.destinationId || "", beratTotal);
+      setOpsiKirim(hasil);
+      if (hasil.length > 0) setKirimDipilih(hasil[0]);
+      else setGalatOngkir("Kurir tidak melayani pengiriman ke wilayah ini.");
+    } catch (e) {
+      setOpsiKirim([]);
+      setGalatOngkir(e.message);
+    } finally {
+      setMemuatOngkir(false);
+    }
+  }, [alamatAktif, beratTotal]);
 
-    const handlePayment = async () => {
-        if (!selectedAddress) {
-            alert("Alamat pengiriman tidak valid.");
-            return;
-        }
+  // Tarif cadangan dipakai saat layanan kurir sedang tidak bisa dihubungi.
+  const pakaiTarifCadangan = opsiKirim.length > 0 && opsiKirim[0].cadangan;
 
-        // Pengecekan terhadap selectedShipping telah dihapus.
+  useEffect(() => {
+    hitungOngkir();
+  }, [hitungOngkir]);
 
-        const totalAmount = calculateTotal();
+  const bayar = async () => {
+    if (items.length === 0) {
+      setGalat("Tidak ada barang untuk dibayar.");
+      return;
+    }
+    if (!alamatAktif) {
+      setGalat("Pilih alamat pengiriman lebih dulu.");
+      return;
+    }
+    if (!kirimDipilih) {
+      setGalat("Pilih layanan pengiriman lebih dulu.");
+      return;
+    }
+
+    setProses(true);
+    setGalat("");
+    try {
+      setLangkah("Menyimpan pesanan…");
+      const pesanan = await pesananApi.checkout({
+        pelangganId: id,
+        items: items.map((i) => ({ productId: i.productId, quantity: i.quantity })),
+        addressId: Number(alamatDipilih),
+        pengiriman: {
+          ongkir: kirimDipilih.ongkir,
+          kurir: kirimDipilih.kurir,
+          layanan: kirimDipilih.layanan,
+          estimasi: kirimDipilih.estimasi,
+        },
+        catatan,
+      });
+
+      localStorage.removeItem(`itemsToCheckout_${id}`);
+
+      setLangkah("Menyiapkan pembayaran…");
+      const { token } = await pembayaranApi.buatTransaksi(pesanan.id);
+
+      // Apa pun yang terjadi di popup, backend yang memastikan hasilnya ke
+      // Midtrans. Browser hanya memberi tahu kapan waktunya bertanya.
+      const selesaikan = async () => {
         try {
-            const response = await fetch(`${API_BASE_URL}/payments/create-transaction`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    amount: totalAmount,
-                    pelangganId: loggedInUserId 
-                }),
-            });
-            
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                throw new Error(errorData.error || "Gagal membuat transaksi di backend.");
-            }
-
-            const data = await response.json();
-            const { token } = data;
-            if (!token) {
-                alert('Gagal mendapatkan token pembayaran.');
-                return;
-            }
-
-            window.snap.pay(token, {
-                onSuccess: (result) => {
-                    console.log('SUCCESS', result);
-                    alert('Pembayaran Berhasil!');
-                    const cartKey = `itemsToCheckout_${loggedInUserId}`;
-                    const addressKey = `selectedAddress_${loggedInUserId}`;
-                    localStorage.removeItem(cartKey);
-                    localStorage.removeItem(addressKey);
-                    navigate('/Transaksi'); 
-                },
-                onPending: (result) => {
-                    console.log('PENDING', result);
-                    alert('Menunggu pembayaran Anda...');
-                    const cartKey = `itemsToCheckout_${loggedInUserId}`;
-                    const addressKey = `selectedAddress_${loggedInUserId}`;
-                    localStorage.removeItem(cartKey);
-                    localStorage.removeItem(addressKey);
-                    navigate('/CartPage'); 
-                },
-                onError: (result) => {
-                    console.log('ERROR', result);
-                    alert('Pembayaran Gagal!');
-                },
-                onClose: () => {
-                    console.log('Anda menutup pop-up pembayaran.');
-                }
-            });
-        } catch (error) {
-            console.error('Error saat proses pembayaran:', error);
-            alert('Terjadi kesalahan: ' + error.message);
+          await pembayaranApi.sinkron(pesanan.id);
+        } catch {
+          /* status tetap akan tersinkron oleh pemeriksaan berkala di backend */
         }
-    };
+        navigate("/Transaksi", { state: { baruBayar: pesanan.orderId } });
+      };
 
-    // --- FUNGSI BARU UNTUK KEMBALI KE KERANJANG ---
-    const handleBackToCart = () => {
-        // Menampilkan dialog konfirmasi bawaan browser
-        if (window.confirm("Anda yakin ingin membatalkan checkout dan kembali ke keranjang?")) {
-            navigate('/CartPage');
-        }
-    };
-    // ---------------------------------------------
+      let snap;
+      try {
+        snap = await muatSnap();
+      } catch {
+        snap = null;
+      }
 
-    if (loading) return <div className="min-h-screen bg-[#183D4B] text-white flex justify-center items-center">Mempersiapkan Checkout...</div>;
+      if (!snap) {
+        navigate("/Transaksi", { state: { menunggu: pesanan.orderId } });
+        return;
+      }
 
+      snap.pay(token, {
+        onSuccess: selesaikan,
+        onPending: selesaikan,
+        onClose: selesaikan,
+        onError: () =>
+          navigate("/Transaksi", { state: { menunggu: pesanan.orderId } }),
+      });
+    } catch (e) {
+      setGalat(e.message);
+    } finally {
+      setProses(false);
+      setLangkah("");
+    }
+  };
+
+  if (memuat) return <ShopLayout><Memuat /></ShopLayout>;
+
+  if (items.length === 0) {
     return (
-        <div className="min-h-screen bg-[#183D4B] p-10 text-white flex justify-center items-center">
-            <div className="w-full max-w-lg bg-white/10 p-8 rounded-2xl shadow-2xl">
-                
-                {/* --- TOMBOL KEMBALI DITAMBAHKAN DI SINI --- */}
-                <div className="flex justify-between items-center mb-6">
-                    <h1 className="text-3xl font-bold">Ringkasan Checkout</h1>
-                    <button 
-                        onClick={handleBackToCart}
-                        className="text-sm bg-white/10 px-4 py-2 rounded-lg hover:bg-white/20 transition-colors"
-                    >
-                        Kembali ke Keranjang
-                    </button>
-                </div>
-                {/* ------------------------------------------- */}
-                
-                <div className="space-y-2 max-h-48 overflow-y-auto pr-2 mb-4 border-b border-white/20 pb-4">
-                    <h2 className="font-semibold text-lg mb-2">Produk yang Dipesan</h2>
-                    {itemsToCheckout.map(item => (
-                        <div key={item.id} className="flex justify-between text-slate-300">
-                            <span>{item.product.name} (x{item.quantity})</span>
-                            <span>{formatIDR(item.product.sellPrice * item.quantity)}</span>
-                        </div>
-                    ))}
-                </div>
-                
-                <div className="my-6">
-                    <h2 className="block font-semibold mb-2 text-lg">Alamat Pengiriman</h2>
-                    {selectedAddress ? (
-                        <div className="bg-white/20 p-4 rounded-lg border border-white/30 text-white">
-                            <p className="font-bold">{selectedAddress.detailAlamat}</p>
-                            <p className="text-sm text-slate-300">{selectedAddress.kelurahan}, {selectedAddress.kecamatan}</p>
-                            <p className="text-sm text-slate-300">{selectedAddress.kabupaten}, {selectedAddress.provinsi}</p>
-                        </div>
-                    ) : (
-                        <p className="text-slate-400">Memuat alamat...</p>
-                    )}
-                </div>
-
-                {/* --- BAGIAN OPSI PENGIRIMAN DIHAPUS --- */}
-                {/* Tampilan opsi pengiriman tidak lagi ditampilkan kepada pengguna. */}
-
-                <div className="text-left my-6 space-y-2 border-t border-white/20 pt-4">
-                    <p className="flex justify-between text-lg">
-                        <span className="font-bold">Subtotal:</span> 
-                        <span className="font-bold">{formatIDR(itemsToCheckout.reduce((total, item) => total + (item.product.sellPrice * item.quantity), 0))}</span>
-                    </p>
-                    <p className="flex justify-between text-lg">
-                        <span className="font-bold">Ongkos Kirim:</span> 
-                        {/* Nilai ongkos kirim di-hardcode menjadi 0 */}
-                        <span className="font-bold">{formatIDR(0)}</span>
-                    </p>
-                    <p className="flex justify-between mt-2 text-xl">
-                        <span className="font-bold">Total Bayar:</span> 
-                        <span className="font-bold">{formatIDR(calculateTotal())}</span>
-                    </p>
-                </div>
-                
-                <button 
-                    onClick={handlePayment}
-                    className="w-full bg-white text-[#183D4B] font-bold py-3 px-6 rounded-lg transition hover:bg-slate-200"
-                    // Logika 'disabled' yang berhubungan dengan shipping telah dihapus
-                >
-                    Bayar Sekarang
-                </button>
-            </div>
-        </div>
+      <ShopLayout>
+        <Kosong
+          judul="Tidak ada barang untuk dibayar"
+          keterangan="Pilih dulu barang di keranjang, lalu tekan lanjut ke checkout."
+          aksi={<Link to="/CartPage"><Tombol>Ke keranjang</Tombol></Link>}
+        />
+      </ShopLayout>
     );
-}
+  }
 
+  return (
+    <ShopLayout>
+      <JudulHalaman judul="Checkout" keterangan="Periksa kembali pesanan sebelum membayar." />
+
+      {galat && <div className="mb-4"><Galat pesan={galat} /></div>}
+
+      <div className="grid gap-6 lg:grid-cols-3">
+        <div className="space-y-5 lg:col-span-2">
+          <Kartu>
+            <KartuJudul
+              judul="Barang yang dibeli"
+              keterangan={`Total berat ${beratTotal || 0} gram${
+                infoToko && beratTotal < infoToko.beratMinimum
+                  ? ` — dibulatkan ke ${infoToko.beratMinimum} gram sesuai ketentuan kurir`
+                  : ""
+              }`}
+            />
+            <ul className="divide-y divide-sand-100">
+              {items.map((i) => (
+                <li key={i.productId} className="flex items-center gap-4 py-3">
+                  <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-sand-100">
+                    {i.image ? (
+                      <img src={urlBerkas(i.image)} alt={i.name} className="h-full w-full object-cover" />
+                    ) : (
+                      <div className="flex h-full items-center justify-center text-sand-300">◻</div>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-sand-800">{i.name}</p>
+                    <p className="tabular text-xs text-sand-400">
+                      {rupiah(i.sellPrice)} × {i.quantity}
+                      {i.weight ? ` · ${i.weight} gr` : ""}
+                    </p>
+                  </div>
+                  <span className="tabular font-semibold text-sand-800">
+                    {rupiah(i.sellPrice * i.quantity)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </Kartu>
+
+          <Kartu>
+            <KartuJudul
+              judul="Alamat pengiriman"
+              aksi={
+                <Link to="/AddressForm">
+                  <Tombol variant="halus" size="sm">Tambah alamat</Tombol>
+                </Link>
+              }
+            />
+            {alamat.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-sand-300 px-4 py-6 text-center">
+                <p className="mb-3 text-sm text-sand-500">Belum ada alamat tersimpan.</p>
+                <Link to="/AddressForm"><Tombol size="sm">Tambah alamat sekarang</Tombol></Link>
+              </div>
+            ) : (
+              <>
+                <Pilihan
+                  value={alamatDipilih}
+                  onChange={(e) => setAlamatDipilih(e.target.value)}
+                >
+                  {alamat.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.namaPenerima ? `${a.namaPenerima} — ` : ""}
+                      {a.detailAlamat}, {a.kecamatan}, {a.kabupaten}
+                      {a.destinationId ? "" : " (tanpa titik kirim)"}
+                    </option>
+                  ))}
+                </Pilihan>
+                {alamatAktif && (
+                  <p className="mt-2 text-sm text-sand-500">
+                    {alamatAktif.namaPenerima} · {alamatAktif.teleponPenerima || "tanpa nomor telepon"}
+                  </p>
+                )}
+              </>
+            )}
+          </Kartu>
+
+          <Kartu>
+            <KartuJudul
+              judul="Layanan pengiriman"
+              keterangan={
+                infoToko
+                  ? `Tarif nyata dari kurir, dihitung dari ${infoToko.originLabel}.`
+                  : "Tarif nyata dari kurir."
+              }
+              aksi={
+                <Tombol variant="halus" size="sm" onClick={hitungOngkir} disabled={memuatOngkir}>
+                  Hitung ulang
+                </Tombol>
+              }
+            />
+
+            {pakaiTarifCadangan && (
+              <div className="mb-3 rounded-lg border border-amber-100 bg-amber-100/50 px-4 py-3 text-sm text-amber-ui">
+                Tarif resmi kurir sedang tidak bisa diambil, jadi yang ditampilkan
+                adalah perkiraan dari toko. Pesanan tetap bisa diproses, dan kami
+                menghubungi Anda bila ongkir sebenarnya berbeda jauh.
+              </div>
+            )}
+
+            {memuatOngkir ? (
+              <Memuat pesan="Menanyakan tarif ke kurir…" />
+            ) : galatOngkir ? (
+              <div className="rounded-lg border border-amber-100 bg-amber-100/50 px-4 py-3 text-sm text-amber-ui">
+                {galatOngkir}
+              </div>
+            ) : opsiKirim.length === 0 ? (
+              <p className="py-4 text-center text-sm text-sand-400">
+                Pilih alamat lebih dulu untuk melihat pilihan pengiriman.
+              </p>
+            ) : (
+              <div className="max-h-96 space-y-2 overflow-y-auto">
+                {opsiKirim.map((o) => {
+                  const dipilih =
+                    kirimDipilih &&
+                    kirimDipilih.kurir === o.kurir &&
+                    kirimDipilih.layanan === o.layanan;
+                  return (
+                    <button
+                      key={`${o.kurir}-${o.layanan}`}
+                      type="button"
+                      onClick={() => setKirimDipilih(o)}
+                      className={`flex w-full items-center justify-between gap-3 rounded-lg border px-4 py-3 text-left transition ${
+                        dipilih
+                          ? "border-brand-500 bg-brand-50"
+                          : "border-sand-200 bg-white hover:border-brand-300"
+                      }`}
+                    >
+                      <span className="min-w-0">
+                        <span className="flex flex-wrap items-center gap-2">
+                          <span className="text-sm font-semibold text-sand-800">
+                            {o.namaKurir}
+                          </span>
+                          <Chip className="bg-sand-200 text-sand-600">{o.layanan}</Chip>
+                        </span>
+                        <span className="mt-0.5 block text-xs text-sand-400">
+                          {o.keterangan} · estimasi {o.estimasi}
+                          {o.cadangan && " · perkiraan"}
+                        </span>
+                      </span>
+                      <span className="tabular shrink-0 font-bold text-brand-600">
+                        {rupiah(o.ongkir)}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </Kartu>
+
+          <Kartu>
+            <KartuJudul judul="Catatan untuk penjual" />
+            <AreaTeks
+              value={catatan}
+              onChange={(e) => setCatatan(e.target.value)}
+              placeholder="Opsional — misalnya minta dibungkus rapi"
+            />
+          </Kartu>
+        </div>
+
+        <div>
+          <Kartu className="sticky top-24">
+            <KartuJudul judul="Ringkasan pembayaran" />
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between text-sand-600">
+                <span>Subtotal ({items.length} barang)</span>
+                <span className="tabular">{rupiah(subtotal)}</span>
+              </div>
+              <div className="flex justify-between text-sand-600">
+                <span>
+                  {kirimDipilih
+                    ? `${kirimDipilih.namaKurir} ${kirimDipilih.layanan}`
+                    : "Ongkos kirim"}
+                </span>
+                <span className="tabular">
+                  {kirimDipilih ? rupiah(ongkir) : "—"}
+                </span>
+              </div>
+              {kirimDipilih && (
+                <p className="text-xs text-sand-400">Estimasi tiba {kirimDipilih.estimasi}</p>
+              )}
+              <div className="flex justify-between border-t border-sand-200 pt-3 text-base font-bold text-sand-800">
+                <span>Total</span>
+                <span className="tabular">{rupiah(total)}</span>
+              </div>
+            </div>
+
+            <Tombol
+              className="mt-4 w-full"
+              onClick={bayar}
+              disabled={proses || !kirimDipilih || !alamatAktif}
+            >
+              {proses ? langkah || "Memproses…" : `Bayar ${rupiah(total)}`}
+            </Tombol>
+
+            <p className="mt-3 text-xs text-sand-400">
+              Pesanan tersimpan lebih dulu, jadi kalau pembayaran terputus isinya
+              tidak hilang dan bisa dilanjutkan dari halaman Pesanan Saya.
+            </p>
+          </Kartu>
+        </div>
+      </div>
+    </ShopLayout>
+  );
+}

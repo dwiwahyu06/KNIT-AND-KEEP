@@ -1,140 +1,161 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { FaShoppingCart, FaArrowLeft } from 'react-icons/fa'; // Import ikon panah kiri
-
-function formatIDR(value) {
-  const n = Number(value || 0);
-  return new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    maximumFractionDigits: 0,
-  }).format(isNaN(n) ? 0 : n);
-}
-
-const API_PRODUCTS_URL = "http://localhost:8080/api/products";
-const API_CART_URL = "http://localhost:8080/api/cart";
+import ShopLayout from "../components/ShopLayout";
+import {
+  Chip, Galat, Input, JudulHalaman, Kartu, Kosong, Memuat, Pilihan, Tombol,
+} from "../components/ui";
+import { keranjangApi, produkApi, urlBerkas } from "../lib/api";
+import { rupiah } from "../lib/format";
+import { pelangganId } from "../lib/session";
 
 export default function ProductListPage() {
-  const [products, setProducts] = useState([]);
-  const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  const id = pelangganId();
 
-  const loggedInUserId = localStorage.getItem('loggedInUserId');
+  const [produk, setProduk] = useState([]);
+  const [memuat, setMemuat] = useState(true);
+  const [galat, setGalat] = useState("");
+  const [pesan, setPesan] = useState("");
+  const [cari, setCari] = useState("");
+  const [kategori, setKategori] = useState("");
+  const [urut, setUrut] = useState("newest");
 
-  const fetchProducts = useCallback(async () => {
-    setLoading(true);
+  const ambil = useCallback(async () => {
+    setMemuat(true);
     try {
-      const url = new URL(API_PRODUCTS_URL);
-      url.searchParams.append('_', new Date().getTime());
-      const res = await fetch(url);
-      if (!res.ok) throw new Error("Gagal mengambil data produk");
-      const data = await res.json();
-      
-      if (Array.isArray(data)) {
-        setProducts(data);
-      } else {
-        setProducts([]);
-      }
-    } catch (err) {
-      console.error(err);
+      setProduk(await produkApi.semua(`?sort=${urut}`));
+      setGalat("");
+    } catch (e) {
+      setGalat(e.message);
     } finally {
-      setLoading(false);
+      setMemuat(false);
     }
-  }, []);
+  }, [urut]);
 
   useEffect(() => {
-    fetchProducts();
-  }, [fetchProducts]);
+    ambil();
+  }, [ambil]);
 
-  const handleAddToCart = async (productId) => {
-    if (!loggedInUserId) {
-        alert("Anda harus login untuk menambahkan item ke keranjang!");
-        navigate('/');
-        return;
+  const kategoriTersedia = useMemo(
+    () => [...new Set(produk.map((p) => p.category).filter(Boolean))].sort(),
+    [produk]
+  );
+
+  const terlihat = useMemo(() => {
+    const q = cari.trim().toLowerCase();
+    return produk.filter((p) => {
+      const cocok = !q || p.name?.toLowerCase().includes(q) || p.category?.toLowerCase().includes(q);
+      return cocok && (!kategori || p.category === kategori);
+    });
+  }, [produk, cari, kategori]);
+
+  const tambah = async (p) => {
+    if (!id) {
+      navigate("/LoginPelanggan");
+      return;
     }
-    
+    setGalat("");
     try {
-        const payload = {
-            pelangganId: loggedInUserId,
-            productId: productId,
-            quantity: 1
-        };
-
-        const res = await fetch(`${API_CART_URL}/add`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-
-        if (res.ok) {
-            alert("Produk berhasil ditambahkan ke keranjang!");
-        } else {
-            const errorData = await res.json().catch(() => ({}));
-            throw new Error(errorData.message || "Gagal menambahkan ke keranjang.");
-        }
-    } catch (err) {
-        console.error(err);
-        alert(err.message);
+      await keranjangApi.tambah(id, p.id, 1);
+      setPesan(`${p.name} masuk keranjang.`);
+      setTimeout(() => setPesan(""), 2500);
+    } catch (e) {
+      setGalat(e.message);
     }
   };
 
-  if (loading) {
-    return <div className="text-center text-white p-10 min-h-screen bg-[#183D4B]">Loading produk...</div>;
-  }
-
   return (
-    <div className="bg-[#183D4B] min-h-screen p-6 md:p-10">
-      <div className="mx-auto max-w-7xl">
+    <ShopLayout>
+      <JudulHalaman
+        judul="Katalog"
+        keterangan="Pakaian thrifting pilihan — tiap barang hanya ada beberapa, jadi stoknya terbatas."
+      />
 
-        {/* ✅ TOMBOL KEMBALI DITAMBAHKAN DI SINI */}
-        <div className="mb-8">
-            <button 
-                onClick={() => navigate('/Dashboard_pelanggan')}
-                className="flex items-center gap-2 text-slate-300 hover:text-white transition"
-            >
-                <FaArrowLeft />
-                Kembali ke Dashboard
-            </button>
+      {pesan && (
+        <div className="mb-4 rounded-lg border border-leaf-100 bg-leaf-100/60 px-4 py-3 text-sm font-medium text-leaf-500">
+          {pesan}
         </div>
+      )}
+      {galat && <div className="mb-4"><Galat pesan={galat} onCoba={ambil} /></div>}
 
-        <div className="text-center mb-10">
-          <h1 className="text-4xl font-bold text-white tracking-tight">Selamat Datang di KNIT-AND-KEEP</h1>
-          <p className="text-lg text-slate-300 mt-2">Temukan pakaian favoritmu di sini</p>
+      <Kartu className="mb-6">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Input placeholder="Cari barang…" value={cari} onChange={(e) => setCari(e.target.value)} />
+          <Pilihan value={kategori} onChange={(e) => setKategori(e.target.value)}>
+            <option value="">Semua kategori</option>
+            {kategoriTersedia.map((k) => <option key={k} value={k}>{k}</option>)}
+          </Pilihan>
+          <Pilihan value={urut} onChange={(e) => setUrut(e.target.value)}>
+            <option value="newest">Terbaru</option>
+            <option value="termurah">Harga termurah</option>
+            <option value="termahal">Harga termahal</option>
+            <option value="nama">Nama A–Z</option>
+          </Pilihan>
         </div>
-        
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
-          {products.map((product) => (
-            <div key={product.id} className="bg-white/10 backdrop-blur-lg rounded-2xl overflow-hidden shadow-lg group flex flex-col">
-              <div className="w-full h-64 bg-slate-200">
-                <img src={product.image || 'https://via.placeholder.com/300'} alt={product.name} className="w-full h-full object-cover"/>
-              </div>
-              <div className="p-5 text-white flex-grow flex flex-col">
-                <h2 className="text-lg font-bold truncate">{product.name}</h2>
-                <p className="text-slate-300 text-sm">{product.category}</p>
-                <p className="text-xl font-semibold mt-2 flex-grow">{formatIDR(product.sellPrice)}</p>
-                
-                <div className="flex gap-2 mt-4">
-                    <button 
-                      type="button" 
-                      className="w-full bg-white text-[#183D4B] font-bold py-2 px-4 rounded-lg transition hover:bg-slate-200"
-                      onClick={() => alert(`Detail untuk ${product.name}`)}
-                    >
-                      Lihat Detail
-                    </button>
-                    <button 
-                      type="button" 
-                      className="p-3 bg-emerald-500 text-white rounded-lg transition hover:bg-emerald-600"
-                      title="Tambah ke Keranjang"
-                      onClick={() => handleAddToCart(product.id)}
-                    >
-                      <FaShoppingCart />
-                    </button>
+      </Kartu>
+
+      {memuat ? (
+        <Memuat />
+      ) : terlihat.length === 0 ? (
+        <Kosong
+          judul="Tidak ada barang"
+          keterangan="Coba ubah kata kunci atau pilih kategori lain."
+        />
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {terlihat.map((p) => {
+            const habis = (p.stock || 0) === 0;
+            return (
+              <div
+                key={p.id}
+                className="flex flex-col overflow-hidden rounded-xl border border-sand-200 bg-white transition hover:border-brand-300"
+              >
+                <Link to={`/produk/${p.id}`} className="relative block aspect-4/5 bg-sand-100">
+                  {p.image ? (
+                    <img src={urlBerkas(p.image)} alt={p.name} className="h-full w-full object-cover" loading="lazy" />
+                  ) : (
+                    <div className="flex h-full items-center justify-center text-sand-300">
+                      <span className="display text-4xl">◻</span>
+                    </div>
+                  )}
+                  {habis && (
+                    <span className="absolute inset-0 flex items-center justify-center bg-white/80 text-sm font-bold text-sand-500">
+                      Stok habis
+                    </span>
+                  )}
+                  {!habis && (p.stock || 0) <= 3 && (
+                    <span className="absolute left-2 top-2">
+                      <Chip className="bg-amber-100 text-amber-ui">Sisa {p.stock}</Chip>
+                    </span>
+                  )}
+                </Link>
+
+                <div className="flex flex-1 flex-col gap-1 p-4">
+                  <span className="label-mono text-sand-400">{p.category || "Umum"}</span>
+                  <Link
+                    to={`/produk/${p.id}`}
+                    className="line-clamp-2 text-sm font-semibold text-sand-800 transition hover:text-brand-600"
+                  >
+                    {p.name}
+                  </Link>
+                  <p className="text-xs text-sand-400">
+                    {[p.size, p.color].filter(Boolean).join(" · ") || "—"}
+                  </p>
+                  <p className="tabular mt-1 text-base font-bold text-brand-600">{rupiah(p.sellPrice)}</p>
+                  <Tombol
+                    className="mt-3 w-full"
+                    size="sm"
+                    disabled={habis}
+                    onClick={() => tambah(p)}
+                  >
+                    {habis ? "Habis" : "Tambah ke keranjang"}
+                  </Tombol>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
-      </div>
-    </div>
+      )}
+    </ShopLayout>
   );
 }

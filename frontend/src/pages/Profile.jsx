@@ -1,229 +1,180 @@
-import React, { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { FaBars, FaTimes } from "react-icons/fa";
+import React, { useCallback, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import ShopLayout from "../components/ShopLayout";
+import {
+  Galat, Input, Isian, JudulHalaman, Kartu, KartuJudul, Kosong, Memuat, Tombol,
+} from "../components/ui";
+import { akunApi, returApi } from "../lib/api";
+import { labelKendala, labelStatus, rupiah, tanggal, warnaStatus } from "../lib/format";
+import { pelangganId, simpanPelanggan } from "../lib/session";
+import { Chip } from "../components/ui";
 
-const Profile = () => {
-  const [user, setUser] = useState(null);
-  const [profile, setProfile] = useState({ alamat: "", nomorHp: "", tanggalLahir: "" });
-  const [formUser, setFormUser] = useState({ username: "", email: "" });
-  const [passwordData, setPasswordData] = useState({ oldPassword: "", newPassword: "" });
-  const [loading, setLoading] = useState(false);
+export default function Profile() {
+  const id = pelangganId();
+  const [retur, setRetur] = useState([]);
+  const [memuat, setMemuat] = useState(true);
+  const [galat, setGalat] = useState("");
+  const [pesan, setPesan] = useState("");
+  const [sibuk, setSibuk] = useState(false);
 
-  const navigate = useNavigate();
-  const userId = localStorage.getItem("userId");
+  const [form, setForm] = useState({ username: "", email: "" });
+  const [sandi, setSandi] = useState({ passwordLama: "", passwordBaru: "" });
 
-  // 🔹 ambil data user + profile
-  useEffect(() => {
-    if (userId) {
-      fetch(`http://localhost:8080/api/pelanggan/${userId}`)
-        .then((res) => {
-          if (!res.ok) throw new Error("Gagal ambil data user");
-          return res.json();
-        })
-        .then((data) => {
-          setUser(data);
-          setFormUser({ username: data.username || "", email: data.email || "" });
-        })
-        .catch(() => setUser({}));
-
-      fetch(`http://localhost:8080/api/profile/${userId}`)
-        .then((res) => {
-          if (!res.ok) throw new Error("Gagal ambil data profile");
-          return res.json();
-        })
-        .then((data) => {
-          setProfile({
-            alamat: data.alamat || "",
-            nomorHp: data.nomorHp || "",
-            tanggalLahir: data.tanggalLahir || "",
-          });
-        })
-        .catch(() => {});
+  const ambil = useCallback(async () => {
+    if (!id) return;
+    setMemuat(true);
+    try {
+      const [p, r] = await Promise.all([
+        akunApi.profil(id),
+        returApi.milikSaya(id).catch(() => []),
+      ]);
+      const user = p.user || p;
+      setForm({ username: user.username || "", email: user.email || "" });
+      setRetur(r);
+      setGalat("");
+    } catch (e) {
+      setGalat(e.message);
+    } finally {
+      setMemuat(false);
     }
-  }, [userId]);
+  }, [id]);
 
-  const handleUserChange = (e) => setFormUser({ ...formUser, [e.target.name]: e.target.value });
-  const handlePasswordChange = (e) => setPasswordData({ ...passwordData, [e.target.name]: e.target.value });
-  const handleProfileChange = (e) => setProfile({ ...profile, [e.target.name]: e.target.value });
+  useEffect(() => {
+    ambil();
+  }, [ambil]);
 
-  const handleUpdateUser = (e) => {
+  const simpanProfil = async (e) => {
     e.preventDefault();
-    setLoading(true);
-    fetch(`http://localhost:8080/api/pelanggan/update/${userId}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(formUser),
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        alert(data.message || "Berhasil update user");
-        if (data.success) setUser(data.user);
-      })
-      .finally(() => setLoading(false));
+    setSibuk(true);
+    setGalat("");
+    try {
+      await akunApi.ubahProfil(id, form);
+      // Token lama tetap dipakai; hanya nama yang ditampilkan yang diperbarui.
+      simpanPelanggan({ id, username: form.username }, null);
+      setPesan("Profil diperbarui.");
+      await ambil();
+    } catch (err) {
+      setGalat(err.message);
+    } finally {
+      setSibuk(false);
+    }
   };
 
-  const handleUpdatePassword = (e) => {
+  const gantiSandi = async (e) => {
     e.preventDefault();
-    setLoading(true);
-    fetch(`http://localhost:8080/api/pelanggan/update-password/${userId}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(passwordData),
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        alert(data.message || "Password berhasil diperbarui");
-        if (data.success) setPasswordData({ oldPassword: "", newPassword: "" });
-      })
-      .finally(() => setLoading(false));
+    if (sandi.passwordBaru.length < 6) {
+      setGalat("Password baru minimal 6 karakter.");
+      return;
+    }
+    setSibuk(true);
+    setGalat("");
+    try {
+      await akunApi.ubahPassword(id, sandi);
+      setSandi({ passwordLama: "", passwordBaru: "" });
+      setPesan("Password berhasil diganti.");
+    } catch (err) {
+      setGalat(err.message);
+    } finally {
+      setSibuk(false);
+    }
   };
 
-  const handleUpdateProfile = (e) => {
-    e.preventDefault();
-    setLoading(true);
-    fetch(`http://localhost:8080/api/profile/update/${userId}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(profile),
-    })
-      .then((res) => res.json())
-      .then(() => {
-        alert("Profil berhasil diperbarui!");
-      })
-      .finally(() => setLoading(false));
-  };
+  if (!id) {
+    return (
+      <ShopLayout>
+        <Kosong
+          judul="Belum masuk"
+          keterangan="Masuk dulu untuk melihat profil Anda."
+          aksi={<Link to="/LoginPelanggan"><Tombol>Masuk</Tombol></Link>}
+        />
+      </ShopLayout>
+    );
+  }
+
+  if (memuat) return <ShopLayout><Memuat /></ShopLayout>;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-100 to-emerald-100">
-      {/* 🔹 Navbar */}
-      <nav className="bg-green-600 text-white px-6 py-4 flex justify-between items-center shadow-md">
-        <div className="flex items-center space-x-4">
-          
-          <h1 className="text-xl font-bold">Knit & Keep</h1>
-        </div>
-        <button
-          className="bg-white text-green-600 px-4 py-2 rounded-lg font-semibold"
-          onClick={() => {
-            localStorage.removeItem("userId");
-            navigate("/Dashboard_pelanggan");
-          }}
-        >
-          Back
-        </button>
-      </nav>
+    <ShopLayout lebar="max-w-4xl">
+      <JudulHalaman judul="Profil" keterangan="Data akun dan riwayat komplain Anda." />
 
-      {/* 🔹 Loading animasi kalau user masih null */}
-      {user === null ? (
-        <div className="flex items-center justify-center h-[80vh]">
-          <div className="relative">
-            <div className="h-16 w-16 rounded-full border-4 border-emerald-200 border-t-emerald-600 animate-spin"></div>
-            <div className="absolute inset-0 h-16 w-16 rounded-full bg-emerald-400/20 animate-ping"></div>
-          </div>
-        </div>
-      ) : (
-        <div className="flex items-center justify-center p-6">
-          <div className="bg-white shadow-lg rounded-2xl p-8 w-full max-w-2xl space-y-10">
-            <h2 className="text-2xl font-bold text-center text-gray-700">Profil Saya</h2>
-
-            {/* FORM USER */}
-            <form onSubmit={handleUpdateUser} className="space-y-4">
-              <h3 className="text-lg font-semibold text-gray-700">Informasi Akun</h3>
-              <input
-                type="text"
-                name="username"
-                placeholder="Username"
-                value={formUser.username}
-                onChange={handleUserChange}
-                className="w-full p-3 border rounded-lg"
-                required
-              />
-              <input
-                type="email"
-                name="email"
-                placeholder="Email"
-                value={formUser.email}
-                onChange={handleUserChange}
-                className="w-full p-3 border rounded-lg"
-                required
-              />
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 rounded-lg disabled:opacity-50"
-              >
-                {loading ? "Menyimpan..." : "Simpan Perubahan"}
-              </button>
-            </form>
-
-            {/* FORM PASSWORD */}
-            <form onSubmit={handleUpdatePassword} className="space-y-4">
-              <h3 className="text-lg font-semibold text-gray-700">Ubah Password</h3>
-              <input
-                type="password"
-                name="oldPassword"
-                placeholder="Password Lama"
-                value={passwordData.oldPassword}
-                onChange={handlePasswordChange}
-                className="w-full p-3 border rounded-lg"
-                required
-              />
-              <input
-                type="password"
-                name="newPassword"
-                placeholder="Password Baru"
-                value={passwordData.newPassword}
-                onChange={handlePasswordChange}
-                className="w-full p-3 border rounded-lg"
-                required
-              />
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-yellow-600 hover:bg-yellow-700 text-white font-semibold py-3 rounded-lg disabled:opacity-50"
-              >
-                {loading ? "Mengubah..." : "Ubah Password"}
-              </button>
-            </form>
-
-            {/* FORM PROFILE */}
-            <form onSubmit={handleUpdateProfile} className="space-y-4">
-              <h3 className="text-lg font-semibold text-gray-700">Data Pribadi</h3>
-              <input
-                type="text"
-                name="alamat"
-                placeholder="Alamat"
-                value={profile.alamat}
-                onChange={handleProfileChange}
-                className="w-full p-3 border rounded-lg"
-              />
-              <input
-                type="text"
-                name="nomorHp"
-                placeholder="Nomor HP"
-                value={profile.nomorHp}
-                onChange={handleProfileChange}
-                className="w-full p-3 border rounded-lg"
-              />
-              <input
-                type="date"
-                name="tanggalLahir"
-                value={profile.tanggalLahir}
-                onChange={handleProfileChange}
-                className="w-full p-3 border rounded-lg"
-              />
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg disabled:opacity-50"
-              >
-                {loading ? "Menyimpan..." : "Simpan Data Pribadi"}
-              </button>
-            </form>
-          </div>
+      {pesan && (
+        <div className="mb-4 rounded-lg border border-leaf-100 bg-leaf-100/60 px-4 py-3 text-sm font-medium text-leaf-500">
+          {pesan}
         </div>
       )}
-    </div>
-  );
-};
+      {galat && <div className="mb-4"><Galat pesan={galat} onCoba={ambil} /></div>}
 
-export default Profile;
+      <div className="grid gap-5 lg:grid-cols-2">
+        <Kartu>
+          <KartuJudul judul="Data akun" />
+          <form onSubmit={simpanProfil} className="space-y-3">
+            <Isian label="Nama pengguna" wajib>
+              <Input required value={form.username}
+                onChange={(e) => setForm({ ...form, username: e.target.value })} />
+            </Isian>
+            <Isian label="Email" wajib>
+              <Input type="email" required value={form.email}
+                onChange={(e) => setForm({ ...form, email: e.target.value })} />
+            </Isian>
+            <Tombol type="submit" disabled={sibuk}>Simpan perubahan</Tombol>
+          </form>
+        </Kartu>
+
+        <Kartu>
+          <KartuJudul judul="Ganti password" />
+          <form onSubmit={gantiSandi} className="space-y-3">
+            <Isian label="Password sekarang" wajib>
+              <Input type="password" required value={sandi.passwordLama}
+                onChange={(e) => setSandi({ ...sandi, passwordLama: e.target.value })} />
+            </Isian>
+            <Isian label="Password baru" wajib hint="Minimal 6 karakter.">
+              <Input type="password" required minLength={6} value={sandi.passwordBaru}
+                onChange={(e) => setSandi({ ...sandi, passwordBaru: e.target.value })} />
+            </Isian>
+            <Tombol type="submit" variant="garis" disabled={sibuk}>Ganti password</Tombol>
+          </form>
+        </Kartu>
+
+        <Kartu className="lg:col-span-2">
+          <KartuJudul
+            judul="Riwayat komplain"
+            keterangan="Pengajuan kendala yang pernah Anda kirim beserta keputusan admin."
+          />
+          {retur.length === 0 ? (
+            <p className="py-6 text-center text-sm text-sand-400">
+              Belum pernah mengajukan komplain.
+            </p>
+          ) : (
+            <ul className="divide-y divide-sand-100">
+              {retur.map((r) => (
+                <li key={r.id} className="py-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="font-mono text-xs font-semibold text-brand-600">{r.orderId}</p>
+                      <p className="text-sm text-sand-700">{labelKendala(r.jenisKendala)}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Chip className={warnaStatus(r.status)}>{labelStatus(r.status)}</Chip>
+                      {r.status === "DISETUJUI" && r.nominalRefund > 0 && (
+                        <span className="tabular text-sm font-semibold text-leaf-500">
+                          {rupiah(r.nominalRefund)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  {r.alasan && <p className="mt-1 text-xs text-sand-500">{r.alasan}</p>}
+                  {r.catatanAdmin && (
+                    <p className="mt-1 rounded bg-sand-100 px-2 py-1.5 text-xs text-sand-600">
+                      Balasan admin: {r.catatanAdmin}
+                    </p>
+                  )}
+                  <p className="mt-1 text-xs text-sand-400">{tanggal(r.createdAt, true)}</p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Kartu>
+      </div>
+    </ShopLayout>
+  );
+}

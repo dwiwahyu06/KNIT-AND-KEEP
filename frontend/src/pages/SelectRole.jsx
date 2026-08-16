@@ -1,62 +1,64 @@
 import React from "react";
-import { useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 
-const SelectRole = () => {
-  const navigate = useNavigate();
-
+export default function SelectRole() {
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-indigo-100 via-white to-purple-100">
-      {/* Card */}
-      <div className="w-full max-w-md bg-white/90 backdrop-blur-md shadow-2xl rounded-2xl p-8">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-extrabold text-gray-800 drop-shadow-sm">
-            Pilih Peran
-          </h1>
-          <p className="text-gray-500 mt-2 text-sm">
-            Silakan pilih untuk registrasi sebagai <br /> Admin atau Pelanggan
-          </p>
-        </div>
+    <div className="flex min-h-screen flex-col items-center justify-center bg-sand-50 px-6 py-12">
+      <Link to="/" className="display mb-2 text-xl font-bold text-brand-600">
+        Knit &amp; Keep
+      </Link>
+      <h1 className="display mb-1 text-2xl font-bold text-sand-800">Masuk sebagai apa?</h1>
+      <p className="mb-8 text-sm text-sand-500">Pilih peran yang sesuai.</p>
 
-        {/* Pilihan Role */}
-        <div className="grid grid-cols-1 gap-6">
-          {/* Admin */}
-          <div
-            onClick={() => navigate("/Login")}
-            className="cursor-pointer group border border-gray-200 rounded-xl p-6 flex flex-col items-center justify-center hover:bg-indigo-50 hover:border-indigo-400 transition transform hover:scale-105 shadow-sm hover:shadow-lg"
-          >
-            <div className="bg-indigo-100 text-indigo-600 p-4 rounded-full mb-4 group-hover:bg-indigo-600 group-hover:text-white transition">
-              {/* Ikon admin (pakai emoji biar simple) */}
-              <span className="text-3xl">👨‍💼</span>
-            </div>
-            <h2 className="text-lg font-semibold text-gray-700 group-hover:text-indigo-600">
-              Admin
-            </h2>
-            <p className="text-sm text-gray-500 mt-1 text-center">
-              Kelola sistem, data, dan pengguna.
-            </p>
-          </div>
-
-          {/* Pelanggan */}
-          <div
-            onClick={() => navigate("/RegisterPelanggan")}
-            className="cursor-pointer group border border-gray-200 rounded-xl p-6 flex flex-col items-center justify-center hover:bg-purple-50 hover:border-purple-400 transition transform hover:scale-105 shadow-sm hover:shadow-lg"
-          >
-            <div className="bg-purple-100 text-purple-600 p-4 rounded-full mb-4 group-hover:bg-purple-600 group-hover:text-white transition">
-              {/* Ikon user */}
-              <span className="text-3xl">🧑‍🤝‍🧑</span>
-            </div>
-            <h2 className="text-lg font-semibold text-gray-700 group-hover:text-purple-600">
-              Pelanggan
-            </h2>
-            <p className="text-sm text-gray-500 mt-1 text-center">
-              Daftar sebagai pelanggan dan nikmati layanan.
-            </p>
-          </div>
-        </div>
+      <div className="grid w-full max-w-2xl gap-4 sm:grid-cols-2">
+        <Pilihan
+          judul="Pelanggan"
+          teks="Belanja barang thrifting, lacak pesanan, dan ajukan komplain kalau ada kendala."
+          ke="/LoginPelanggan"
+          daftar="/RegisterPelanggan"
+          utama
+        />
+        <Pilihan
+          judul="Pengelola toko"
+          teks="Kelola stok, layani pesanan, catat penjualan kasir, dan lihat laporan keuangan."
+          ke="/login"
+          catatan="Akun pengelola dibuatkan oleh pengelola lain"
+        />
       </div>
+
+      <Link to="/" className="mt-8 text-sm text-sand-500 hover:text-brand-600">
+        ← Kembali ke beranda
+      </Link>
     </div>
   );
-};
+}
 
-export default SelectRole;
+function Pilihan({ judul, teks, ke, daftar, catatan, utama = false }) {
+  return (
+    <div
+      className={`flex flex-col rounded-xl border p-6 ${
+        utama ? "border-brand-300 bg-white" : "border-sand-200 bg-white"
+      }`}
+    >
+      <h2 className="display text-lg font-bold text-sand-800">{judul}</h2>
+      <p className="mt-2 flex-1 text-sm text-sand-500">{teks}</p>
+      <Link
+        to={ke}
+        className={`mt-5 rounded-lg px-4 py-2.5 text-center text-sm font-semibold transition ${
+          utama
+            ? "bg-brand-600 text-white hover:bg-brand-700"
+            : "border border-sand-300 text-sand-700 hover:border-brand-400 hover:text-brand-600"
+        }`}
+      >
+        Masuk
+      </Link>
+      {daftar ? (
+        <Link to={daftar} className="mt-2 text-center text-xs text-sand-400 hover:text-brand-600">
+          Belum punya akun? Daftar
+        </Link>
+      ) : (
+        <span className="mt-2 text-center text-xs text-sand-400">{catatan}</span>
+      )}
+    </div>
+  );
+}
