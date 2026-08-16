@@ -1,114 +1,141 @@
 package com.knit_and_keep.backend.service;
 
+import com.knit_and_keep.backend.model.OrderFlow;
 import com.knit_and_keep.backend.model.Transaction;
-import com.knit_and_keep.backend.model.UserPelanggan;
 import com.knit_and_keep.backend.repository.TransactionRepository;
-import com.knit_and_keep.backend.repository.UserPelangganRepository;
-import okhttp3.*;
 import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
-import java.util.Base64;
+import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.UUID;
 
+/**
+ * Jembatan antara alur pesanan dan Midtrans.
+ *
+ * Satu-satunya jalan sebuah pesanan berubah menjadi lunas adalah lewat
+ * {@link #sinkronkan}, yang selalu bertanya dulu ke Midtrans. Frontend tidak
+ * pernah bisa menyatakan sebuah pesanan sudah dibayar.
+ */
 @Service
 public class PaymentService {
 
-    @Value("${midtrans.server.key}")
-    private String midtransServerKey;
+    @Autowired private TransactionRepository transactionRepository;
+    @Autowired private MidtransService midtrans;
+    @Autowired private OrderService orderService;
 
-    @Autowired
-    private TransactionRepository transactionRepository;
+    public Map<String, Object> mulaiPembayaran(Long transactionId) throws IOException {
+        Transaction trx = transactionRepository.findById(transactionId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Pesanan tidak ditemukan"));
 
-    @Autowired
-    private UserPelangganRepository userPelangganRepository;
-
-    private final OkHttpClient client = new OkHttpClient();
-
-    public String createTransaction(Long amount, Long pelangganId) throws IOException {
-        String orderId = "KNIT-AND-KEEP-" + UUID.randomUUID().toString();
-
-        UserPelanggan pelanggan = userPelangganRepository.findById(pelangganId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Pelanggan tidak ditemukan"));
-
-        Transaction transaction = new Transaction();
-        transaction.setOrderId(orderId);
-        transaction.setAmount(amount);
-        transaction.setStatus("PENDING");
-        transaction.setType("PAYMENT");
-        transaction.setDescription("Pembayaran untuk pesanan " + orderId);
-        transaction.setPelanggan(pelanggan); // Hubungkan ke objek Pelanggan
-        
-        // ✅ PERBAIKAN: Mengisi nilai untuk account_id agar tidak error
-        
-        transactionRepository.save(transaction);
-
-        JSONObject transactionDetails = new JSONObject();
-        transactionDetails.put("order_id", orderId);
-        transactionDetails.put("gross_amount", amount);
-
-        JSONObject customerDetails = new JSONObject();
-        customerDetails.put("first_name", pelanggan.getUsername());
-        customerDetails.put("email", pelanggan.getEmail());
-
-        JSONObject requestBody = new JSONObject();
-        requestBody.put("transaction_details", transactionDetails);
-        requestBody.put("customer_details", customerDetails);
-
-        RequestBody body = RequestBody.create(
-            requestBody.toString(),
-            MediaType.get("application/json; charset=utf-8")
-        );
-
-        String encodedKey = Base64.getEncoder().encodeToString((midtransServerKey + ":").getBytes());
-
-        Request request = new Request.Builder()
-            .url("https://app.sandbox.midtrans.com/snap/v1/transactions")
-            .post(body)
-            .addHeader("Accept", "application/json")
-            .addHeader("Content-Type", "application/json")
-            .addHeader("Authorization", "Basic " + encodedKey)
-            .build();
-
-        try (Response response = client.newCall(request).execute()) {
-            if (!response.isSuccessful()) {
-                String errorBody = response.body() != null ? response.body().string() : "No response body";
-                System.err.println("Gagal membuat transaksi Midtrans: " + errorBody);
-                throw new IOException("Unexpected code " + response);
-            }
-            
-            String responseBody = response.body().string();
-            JSONObject jsonResponse = new JSONObject(responseBody);
-            
-            return jsonResponse.getString("token");
+        if (OrderFlow.sudahDibayar(trx.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Pesanan ini sudah dibayar");
         }
+        if (!"ONLINE".equalsIgnoreCase(trx.getChannel())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Pembayaran daring hanya untuk pesanan dari web");
+        }
+        return midtrans.buatSnapToken(trx);
+    }
+
+    /**
+     * Menanyakan status sebuah pesanan ke Midtrans lalu menyesuaikan status di
+     * database bila perlu.
+     *
+     * Ini titik masuk tunggal untuk tiga jalur berbeda: tombol pelanggan
+     * setelah menutup popup, tombol admin di halaman pesanan, dan pemeriksaan
+     * berkala di latar belakang.
+     */
+    @Transactional
+    public Map<String, Object> sinkronkan(Long transactionId) {
+        Transaction trx = transactionRepository.findById(transactionId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Pesanan tidak ditemukan"));
+        return sinkronkan(trx);
     }
 
     @Transactional
-    public void handleNotification(Map<String, Object> notification) {
-        String orderId = (String) notification.get("order_id");
-        String transactionStatus = (String) notification.get("transaction_status");
-        String fraudStatus = (String) notification.get("fraud_status");
+    public Map<String, Object> sinkronkan(Transaction trx) {
+        Map<String, Object> hasil = new LinkedHashMap<>();
+        hasil.put("orderId", trx.getOrderId());
+        hasil.put("statusSebelum", trx.getStatus());
 
-        Transaction transaction = transactionRepository.findByOrderId(orderId).orElse(null);
-
-        if (transaction != null) {
-            System.out.println("Memproses notifikasi untuk Order ID: " + orderId);
-            if ("capture".equals(transactionStatus) || "settlement".equals(transactionStatus)) {
-                if ("accept".equals(fraudStatus)) {
-                    transaction.setStatus("SUCCESS");
-                }
-            } else if ("cancel".equals(transactionStatus) || "deny".equals(transactionStatus) || "expire".equals(transactionStatus)) {
-                transaction.setStatus("FAILED");
-            }
-            transactionRepository.save(transaction);
+        JSONObject status;
+        try {
+            status = midtrans.cekStatus(trx.getOrderId());
+        } catch (IOException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
+                    "Tidak bisa menghubungi Midtrans: " + e.getMessage());
         }
+
+        hasil.put("terhubung", true);
+        hasil.put("kodeMidtrans", status.optString("status_code", ""));
+
+        String kode = status.optString("status_code", "");
+        if ("404".equals(kode)) {
+            // Token pembayaran sudah dibuat, tetapi pelanggan belum memilih cara
+            // bayar apa pun — jadi Midtrans memang belum punya catatannya.
+            hasil.put("status", trx.getStatus());
+            hasil.put("statusMidtrans", "belum_dimulai");
+            hasil.put("pesan", "Pembayaran belum pernah dimulai. Buka kembali halaman pembayaran untuk menyelesaikannya.");
+            hasil.put("berubah", false);
+            return hasil;
+        }
+
+        String caraBayar = status.optString("payment_type", null);
+        if (caraBayar != null && !caraBayar.isBlank()) {
+            trx.setMetodeMidtrans(caraBayar);
+        }
+        var kedaluwarsa = midtrans.waktuKedaluwarsa(status);
+        if (kedaluwarsa != null) trx.setKedaluwarsaPada(kedaluwarsa);
+        transactionRepository.save(trx);
+
+        MidtransService.Hasil tafsir = midtrans.tafsirkan(status);
+        boolean berubah = false;
+
+        if (tafsir == MidtransService.Hasil.LUNAS && !OrderFlow.sudahDibayar(trx.getStatus())) {
+            orderService.ubahStatus(trx.getId(), OrderFlow.DIPROSES, null, null,
+                    "Pembayaran diterima Midtrans" + (caraBayar == null ? "" : " lewat " + caraBayar),
+                    "MIDTRANS");
+            if (trx.getPelanggan() != null) {
+                orderService.kosongkanKeranjang(trx.getPelanggan().getId());
+            }
+            berubah = true;
+        } else if (tafsir == MidtransService.Hasil.GAGAL
+                && OrderFlow.MENUNGGU_PEMBAYARAN.equals(OrderFlow.normalize(trx.getStatus()))) {
+            orderService.ubahStatus(trx.getId(), OrderFlow.DIBATALKAN, null, null,
+                    "Pembayaran dibatalkan atau kedaluwarsa di Midtrans", "MIDTRANS");
+            berubah = true;
+        }
+
+        Transaction terbaru = transactionRepository.findById(trx.getId()).orElse(trx);
+        hasil.put("status", terbaru.getStatus());
+        hasil.put("statusMidtrans", status.optString("transaction_status"));
+        hasil.put("caraBayar", caraBayar);
+        hasil.put("berubah", berubah);
+        hasil.put("pesan", switch (tafsir) {
+            case LUNAS -> "Pembayaran sudah diterima.";
+            case MENUNGGU -> "Pembayaran belum selesai. Selesaikan sebelum batas waktu habis.";
+            case GAGAL -> "Pembayaran dibatalkan atau kedaluwarsa.";
+            case TIDAK_DIKENAL -> "Status pembayaran belum bisa dipastikan.";
+        });
+        return hasil;
+    }
+
+    /**
+     * Notifikasi resmi dari Midtrans. Baru dipercaya setelah tanda tangannya
+     * cocok, lalu statusnya tetap dikonfirmasi ulang lewat Status API.
+     */
+    @Transactional
+    public void tanganiNotifikasi(Map<String, Object> notifikasi) {
+        if (!midtrans.tandaTanganSah(notifikasi)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Tanda tangan notifikasi tidak sah — permintaan diabaikan");
+        }
+        String orderId = String.valueOf(notifikasi.get("order_id"));
+        transactionRepository.findByOrderId(orderId).ifPresent(this::sinkronkan);
     }
 }
