@@ -45,6 +45,99 @@ databasenya.
 
 ---
 
+## Langkah Railway + Vercel, dari nol
+
+Berkas pengaturannya sudah ada di repositori, jadi kedua layanan tinggal
+membacanya sendiri:
+
+- `backend/railway.json` — memakai Dockerfile, dan menunggu `/api/kesehatan`
+  menjawab sebelum lalu lintas dialihkan ke versi baru
+- `frontend/vercel.json` — mengarahkan semua alamat ke `index.html`
+
+Aturan di `vercel.json` itu wajib. Aplikasi ini memakai React Router, jadi
+alamat seperti `/Dashboard` atau `/produk/3` tidak punya berkas fisik di
+server. Tanpa aturan tersebut, hanya halaman depan yang bisa dibuka:
+menyegarkan halaman atau membuka tautan produk langsung dari luar akan
+dijawab 404.
+
+### 1. Database di Railway
+
+Buat project baru → **Add PostgreSQL**. Buka tab *Variables*, salin nilainya,
+lalu susun menjadi bentuk JDBC:
+
+```
+DB_URL=jdbc:postgresql://<PGHOST>:<PGPORT>/<PGDATABASE>
+DB_USERNAME=<PGUSER>
+DB_PASSWORD=<PGPASSWORD>
+```
+
+Alamat bawaan Railway berbentuk `postgresql://...`, sedangkan Java memerlukan
+awalan `jdbc:`. Ini penyebab kegagalan pertama yang paling sering terjadi.
+
+### 2. Backend di Railway
+
+**Add Service → GitHub Repo** → pilih repositori ini → **Settings → Root
+Directory** isi `backend`. Railway akan menemukan `Dockerfile` sendiri.
+
+Isi variabelnya dari [`backend/.env.example`](../backend/.env.example). Untuk
+penyalaan pertama, dua nilai ini sengaja dibedakan:
+
+```
+DDL_AUTO=update             sementara, supaya tabelnya terbentuk
+MIDTRANS_PRODUCTION=false   sementara, supaya masih memakai sandbox
+```
+
+`PORT` tidak perlu diisi — Railway menyediakannya sendiri, dan aplikasi sudah
+membacanya.
+
+### 3. Kunci skemanya
+
+Setelah aplikasi menyala dan tabelnya terbentuk, ubah `DDL_AUTO=validate` lalu
+jalankan ulang. Sejak ini, perubahan struktur tabel dikerjakan sengaja.
+
+### 4. Volume untuk foto
+
+**Add Volume** → mount di `/data` → isi `UNGGAHAN_FOLDER=/data/unggahan`.
+
+Tanpa ini, seluruh foto produk dan foto bukti komplain hilang setiap kali
+aplikasi diperbarui, karena isi folder biasa di dalam kontainer tidak
+bertahan.
+
+### 5. Frontend di Vercel
+
+**Add New → Project** → pilih repositori ini → **Root Directory** isi
+`frontend`. Tambahkan satu variabel:
+
+```
+VITE_API_BASE=https://<nama-backend>.up.railway.app/api
+```
+
+Harus lengkap sampai `/api` dan tanpa garis miring di akhir. Nilai ini
+ditanam saat build, jadi mengubahnya kelak berarti membangun ulang.
+
+### 6. Sambungkan keduanya
+
+Kembali ke Railway, isi alamat frontend supaya peramban diizinkan memanggil
+backend:
+
+```
+CORS_ORIGINS=https://<nama-proyek>.vercel.app
+```
+
+Kalau nanti memakai domain sendiri, tulis keduanya dipisah koma.
+
+### 7. Uji dengan sandbox lebih dulu
+
+Buka toko, tambah satu produk, belanja, dan bayar memakai kartu uji. Pastikan
+seluruh alur jalan **sebelum** menyentuh uang sungguhan.
+
+### 8. Baru aktifkan mode produksi
+
+Ganti kunci Midtrans dengan kunci produksi, isi `MIDTRANS_PRODUCTION=true`,
+lalu daftarkan alamat notifikasinya di dasbor Midtrans. Rinciannya di bawah.
+
+---
+
 ## Urutan pengerjaannya
 
 ### 1. Terbitkan kunci baru lebih dulu
