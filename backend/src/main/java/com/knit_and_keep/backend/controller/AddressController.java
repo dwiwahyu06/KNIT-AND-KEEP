@@ -1,151 +1,89 @@
-// package com.knit_and_keep.backend.controller;
-// import com.knit_and_keep.backend.model.Address;
-// import com.knit_and_keep.backend.service.AddressService;
-// import com.knit_and_keep.backend.repository.AddressRepository;
-// import org.springframework.beans.factory.annotation.Autowired;
-// import org.springframework.http.ResponseEntity;
-// import org.springframework.web.bind.annotation.*;
-// import java.util.List;
-// import org.springframework.http.HttpStatus;
-
-// @CrossOrigin(origins = "http://localhost:5173")
-// @RestController
-// @RequestMapping("/api")
-// public class AddressController {
-//     @Autowired
-//     private AddressService addressService;
-//     @Autowired
-//     private AddressRepository addressRepository;
-
-//     @GetMapping("/pelanggan/{pelangganId}/addresses")
-//     public ResponseEntity<List<Address>> getAddressesByPelanggan(@PathVariable Long pelangganId) {
-//         List<Address> addresses = addressService.getAddressesByPelangganId(pelangganId);
-//         return ResponseEntity.ok(addresses);
-//     }
-
-//     @PostMapping("/pelanggan/{pelangganId}/addresses")
-//     public ResponseEntity<Address> createAddress(@PathVariable Long pelangganId, @RequestBody Address address) {
-//         Address savedAddress = addressService.createAddressForPelanggan(pelangganId, address);
-//         return ResponseEntity.status(HttpStatus.CREATED).body(savedAddress);
-//     }
-
-//     @GetMapping("/addresses/{id}")
-//     public ResponseEntity<Address> getAddressById(@PathVariable Long id) {
-//         return addressRepository.findById(id)
-//                 .map(ResponseEntity::ok)
-//                 .orElse(ResponseEntity.notFound().build());
-//     }
-
-//     @PutMapping("/addresses/{id}")
-//     public ResponseEntity<Address> updateAddress(@PathVariable Long id, @RequestBody Address addressDetails) {
-//         return addressRepository.findById(id)
-//                 .map(existingAddress -> {
-//                     existingAddress.setProvinsi(addressDetails.getProvinsi());
-//                     existingAddress.setKabupaten(addressDetails.getKabupaten());
-//                     existingAddress.setKecamatan(addressDetails.getKecamatan());
-//                     existingAddress.setKelurahan(addressDetails.getKelurahan());
-//                     existingAddress.setDetailAlamat(addressDetails.getDetailAlamat());
-//                     existingAddress.setRt(addressDetails.getRt());
-//                     existingAddress.setRw(addressDetails.getRw());
-//                     existingAddress.setLatitude(addressDetails.getLatitude());
-//                     existingAddress.setLongitude(addressDetails.getLongitude());
-//                     return ResponseEntity.ok(addressRepository.save(existingAddress));
-//                 })
-//                 .orElse(ResponseEntity.notFound().build());
-//     }
-
-//     @DeleteMapping("/addresses/{id}")
-//     public ResponseEntity<HttpStatus> deleteAddress(@PathVariable Long id) {
-//         if (!addressRepository.existsById(id)) {
-//             return new ResponseEntity<>(HttpStatus.NOT_FOUND);
-//         }
-//         addressRepository.deleteById(id);
-//         return new ResponseEntity<>(HttpStatus.NO_CONTENT);
-//     }
-// }
-
 package com.knit_and_keep.backend.controller;
 
-import com.knit_and_keep.backend.model.AddressDto;
 import com.knit_and_keep.backend.model.Address;
-import com.knit_and_keep.backend.service.AddressService;
+import com.knit_and_keep.backend.model.AddressDto;
 import com.knit_and_keep.backend.repository.AddressRepository;
+import com.knit_and_keep.backend.security.Sesi;
+import com.knit_and_keep.backend.service.AddressService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
 import java.util.List;
-import org.springframework.http.HttpStatus;
 
 @CrossOrigin(origins = "http://localhost:5173")
 @RestController
 @RequestMapping("/api")
 public class AddressController {
-    @Autowired
-    private AddressService addressService;
-    
-    @Autowired
-    private AddressRepository addressRepository;
+
+    @Autowired private AddressService addressService;
+    @Autowired private AddressRepository addressRepository;
 
     @GetMapping("/pelanggan/{pelangganId}/addresses")
-    public ResponseEntity<List<Address>> getAddressesByPelanggan(@PathVariable Long pelangganId) {
-        List<Address> addresses = addressService.getAddressesByPelangganId(pelangganId);
-        return ResponseEntity.ok(addresses);
+    public ResponseEntity<List<Address>> milikPelanggan(@PathVariable Long pelangganId) {
+        Sesi.wajibPemilik(pelangganId);
+        return ResponseEntity.ok(addressService.getAddressesByPelangganId(pelangganId));
     }
 
-    // Menggunakan DTO untuk membuat alamat baru
     @PostMapping("/pelanggan/{pelangganId}/addresses")
-    public ResponseEntity<Address> createAddress(@PathVariable Long pelangganId, @RequestBody AddressDto addressDto) {
-        Address address = new Address();
-        // Memetakan data dari DTO ke Entity Address
-        address.setProvinsi(addressDto.getProvinsi());
-        address.setKabupaten(addressDto.getKabupaten());
-        address.setKecamatan(addressDto.getKecamatan());
-        address.setKelurahan(addressDto.getKelurahan());
-        address.setDetailAlamat(addressDto.getDetailAlamat());
-        address.setRt(addressDto.getRt());
-        address.setRw(addressDto.getRw());
-        address.setLatitude(addressDto.getLatitude());
-        address.setLongitude(addressDto.getLongitude());
-        address.setDestinationId(addressDto.getDestinationId()); // Menyimpan ID Komerce
-
-        Address savedAddress = addressService.createAddressForPelanggan(pelangganId, address);
-        return ResponseEntity.status(HttpStatus.CREATED).body(savedAddress);
+    public ResponseEntity<Address> buat(@PathVariable Long pelangganId, @RequestBody AddressDto dto) {
+        Sesi.wajibPemilik(pelangganId);
+        Address alamat = new Address();
+        salin(dto, alamat);
+        Address tersimpan = addressService.createAddressForPelanggan(pelangganId, alamat);
+        return ResponseEntity.status(HttpStatus.CREATED).body(tersimpan);
     }
 
     @GetMapping("/addresses/{id}")
-    public ResponseEntity<Address> getAddressById(@PathVariable Long id) {
+    public ResponseEntity<Address> detail(@PathVariable Long id) {
         return addressRepository.findById(id)
-                .map(ResponseEntity::ok)
+                .map(a -> { pastikanMilikSendiri(a); return ResponseEntity.ok(a); })
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    // Menggunakan DTO untuk memperbarui alamat
     @PutMapping("/addresses/{id}")
-    public ResponseEntity<Address> updateAddress(@PathVariable Long id, @RequestBody AddressDto addressDetails) {
+    public ResponseEntity<Address> ubah(@PathVariable Long id, @RequestBody AddressDto dto) {
         return addressRepository.findById(id)
-                .map(existingAddress -> {
-                    existingAddress.setProvinsi(addressDetails.getProvinsi());
-                    existingAddress.setKabupaten(addressDetails.getKabupaten());
-                    existingAddress.setKecamatan(addressDetails.getKecamatan());
-                    existingAddress.setKelurahan(addressDetails.getKelurahan());
-                    existingAddress.setDetailAlamat(addressDetails.getDetailAlamat());
-                    existingAddress.setRt(addressDetails.getRt());
-                    existingAddress.setRw(addressDetails.getRw());
-                    existingAddress.setLatitude(addressDetails.getLatitude());
-                    existingAddress.setLongitude(addressDetails.getLongitude());
-                    existingAddress.setDestinationId(addressDetails.getDestinationId()); // Memperbarui ID Komerce
-                    return ResponseEntity.ok(addressRepository.save(existingAddress));
+                .map(alamat -> {
+                    pastikanMilikSendiri(alamat);
+                    salin(dto, alamat);
+                    return ResponseEntity.ok(addressRepository.save(alamat));
                 })
                 .orElse(ResponseEntity.notFound().build());
     }
 
     @DeleteMapping("/addresses/{id}")
-    public ResponseEntity<HttpStatus> deleteAddress(@PathVariable Long id) {
-        if (!addressRepository.existsById(id)) {
-            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
-        }
-        addressRepository.deleteById(id);
-        return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+    public ResponseEntity<HttpStatus> hapus(@PathVariable Long id) {
+        return addressRepository.findById(id)
+                .map(a -> {
+                    pastikanMilikSendiri(a);
+                    addressRepository.delete(a);
+                    return new ResponseEntity<HttpStatus>(HttpStatus.NO_CONTENT);
+                })
+                .orElse(new ResponseEntity<>(HttpStatus.NOT_FOUND));
+    }
+
+    private void pastikanMilikSendiri(Address alamat) {
+        if (Sesi.adalahAdmin()) return;
+        Sesi.wajibPemilik(alamat.getPelanggan() == null ? null : alamat.getPelanggan().getId());
+    }
+
+    private void salin(AddressDto dto, Address alamat) {
+        alamat.setNamaPenerima(dto.getNamaPenerima());
+        alamat.setTeleponPenerima(dto.getTeleponPenerima());
+        alamat.setProvinsi(dto.getProvinsi());
+        alamat.setKabupaten(dto.getKabupaten());
+        alamat.setKecamatan(dto.getKecamatan());
+        alamat.setKelurahan(dto.getKelurahan());
+        alamat.setKodePos(dto.getKodePos());
+        alamat.setDetailAlamat(dto.getDetailAlamat());
+        alamat.setRt(dto.getRt());
+        alamat.setRw(dto.getRw());
+        alamat.setLatitude(dto.getLatitude());
+        alamat.setLongitude(dto.getLongitude());
+        alamat.setDestinationId(dto.getDestinationId());
+        alamat.setLabelTujuan(dto.getLabelTujuan());
+        if (dto.getUtama() != null) alamat.setUtama(dto.getUtama());
     }
 }
-
