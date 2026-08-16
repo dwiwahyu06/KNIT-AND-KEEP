@@ -1,2 +1,97 @@
 @import "tailwindcss";
 @import "leaflet/dist/leaflet.css";
+
+/*
+  Identitas visual Knit & Keep.
+  Warna dasarnya tetap teal tua seperti versi sebelumnya, ditemani aksen
+  mustard yang mengambil nuansa benang wol — hangat, tidak mencolok.
+*/
+@theme {
+  --color-brand-50:  #eef5f6;
+  --color-brand-100: #d3e5e8;
+  --color-brand-200: #a7cbd1;
+  --color-brand-300: #6ea6b0;
+  --color-brand-400: #3d7d8c;
+  --color-brand-500: #245e6e;
+  --color-brand-600: #183d4b;
+  --color-brand-700: #12303b;
+  --color-brand-800: #0d232b;
+  --color-brand-900: #08171d;
+
+  --color-wool-50:  #fdf8ef;
+  --color-wool-100: #f8ecd6;
+  --color-wool-200: #f0d7a9;
+  --color-wool-300: #e6bd74;
+  --color-wool-400: #dda54c;
+  --color-wool-500: #c9873a;
+  --color-wool-600: #a76a2c;
+
+  --color-sand-50:  #f7f7f5;
+  --color-sand-100: #eeefec;
+  --color-sand-200: #dfe1dd;
+  --color-sand-300: #c6c9c4;
+  --color-sand-400: #9ba09a;
+  --color-sand-500: #6f746e;
+  --color-sand-600: #4d524d;
+  --color-sand-700: #363a36;
+  --color-sand-800: #232622;
+
+  --color-leaf-500:  #2f7a5b;
+  --color-leaf-100:  #dcefe5;
+  --color-amber-ui:  #b5822b;
+  --color-amber-100: #f7ecd4;
+  --color-rust-500:  #b3453a;
+  --color-rust-100:  #f7e0dd;
+
+  --font-sans: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  --font-display: "Segoe UI Variable Display", "Segoe UI Semibold", "Segoe UI", system-ui, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Mono", Consolas, "SF Mono", Menlo, monospace;
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  background-color: var(--color-sand-50);
+  color: var(--color-sand-800);
+  font-family: var(--font-sans);
+}
+
+/* Angka yang berjejer di tabel harus lurus. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Judul halaman dan kartu. */
+.display {
+  font-family: var(--font-display);
+  letter-spacing: -0.018em;
+}
+
+.label-mono {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+/* Fokus keyboard harus selalu terlihat. */
+:focus-visible {
+  outline: 2px solid var(--color-brand-400);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* Scrollbar yang menyatu dengan tema. */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--color-sand-100); }
+::-webkit-scrollbar-thumb { background: var(--color-sand-300); border-radius: 99px; border: 2px solid var(--color-sand-100); }
+::-webkit-scrollbar-thumb:hover { background: var(--color-sand-400); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
