@@ -1,0 +1,26 @@
+# Rahasia — jangan pernah ikut masuk riwayat Git.
+.env
+.env.*
+!.env.example
+*.local
+
+# Berkas yang diunggah pengguna
+backend/unggahan/
+unggahan/
+
+# Hasil pencadangan — berisi data pelanggan sungguhan.
+cadangan/
+database-*.sql
+unggahan-*.zip
+backup.sql
+*.dump
+
+# Hasil build
+backend/target/
+frontend/dist/
+frontend/node_modules/
+
+# Log dan berkas sementara
+*.log
+.DS_Store
+Thumbs.db
