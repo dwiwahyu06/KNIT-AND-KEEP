@@ -1,21 +1,28 @@
-// package com.knit_and_keep.backend.repository;
+package com.knit_and_keep.backend.repository;
 
-// import org.springframework.data.jpa.repository.JpaRepository;
-// import org.springframework.data.jpa.repository.Query;
-// import org.springframework.stereotype.Repository;
+import com.knit_and_keep.backend.model.Expense;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
 
-// import com.knit_and_keep.backend.model.Expense;
+import java.time.LocalDate;
+import java.util.List;
 
-// @Repository
-// public interface ExpenseRepository extends JpaRepository<Expense, Long> {
+@Repository
+public interface ExpenseRepository extends JpaRepository<Expense, Long> {
 
-//   // Total expense per month untuk 6 bulan terakhir
-//   @Query(value = """
-//     SELECT to_char(date_trunc('month', e.date), 'YYYY-MM') AS ym,
-//            COALESCE(SUM(e.amount),0) as total
-//     FROM expense e
-//     WHERE e.date >= (CURRENT_DATE - INTERVAL '6 months')
-//     GROUP BY 1 ORDER BY 1
-//   """, nativeQuery = true)
-//   java.util.List<Object[]> expenseLast6Months();
-// }
+    /**
+     * Penyaring pengeluaran. Sama seperti arus kas, penyaringan dikerjakan di
+     * kueri dan parameternya selalu terisi nilai penanda.
+     */
+    @Query("""
+        SELECT e FROM Expense e
+        WHERE (:kategori = '' OR e.category = :kategori)
+          AND e.date BETWEEN :dari AND :sampai
+        ORDER BY e.date DESC, e.id DESC
+        """)
+    List<Expense> cari(@Param("kategori") String kategori,
+                       @Param("dari") LocalDate dari,
+                       @Param("sampai") LocalDate sampai);
+}
