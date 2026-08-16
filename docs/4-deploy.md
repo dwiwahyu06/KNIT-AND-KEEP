@@ -19,6 +19,30 @@ lewat variabel lingkungan, `backend/Dockerfile` sudah ada, dan ada penjaga yang
 Backend dan frontend sengaja dipisah karena keduanya berbeda sifat: backend
 perlu terus berjalan dan menyimpan data, frontend cuma berkas yang dibagikan.
 
+### Kenapa bukan Supabase untuk backend
+
+Supabase menjalankan kode server lewat Edge Functions, dan runtime-nya
+**Deno/TypeScript**. Ia tidak bisa menjalankan aplikasi Java, jadi backend
+Spring Boot ini tidak mungkin ditaruh di sana tanpa menulis ulang seluruhnya.
+
+Yang cocok dari Supabase adalah **databasenya**. PostgreSQL-nya terkelola,
+punya dasbor yang enak dipakai, dan bisa dipakai backend mana pun. Satu hal
+yang perlu diketahui: pada paket gratis, proyek yang tidak dipakai selama
+seminggu akan dijeda, dan pencadangan harian baru ada di paket berbayar.
+
+Jadi kalau ingin memakai Supabase, susunannya menjadi:
+
+| Bagian | Layanan |
+| --- | --- |
+| Frontend | Vercel |
+| Backend Spring Boot | Railway atau Render |
+| Database | Supabase |
+| Foto produk | Volume permanen di Railway/Render |
+
+Susunan ini sah dan berjalan baik, hanya melibatkan tiga penyedia alih-alih
+dua. Kalau ingin yang paling sederhana, biarkan Railway sekalian menyediakan
+databasenya.
+
 ---
 
 ## Urutan pengerjaannya
@@ -51,6 +75,11 @@ Cara paling sederhana, dikerjakan sekali saja:
 1. Nyalakan backend dengan `DDL_AUTO=update` pada database yang masih kosong
 2. Biarkan tabelnya terbentuk, lalu matikan
 3. **Ubah menjadi `DDL_AUTO=validate`** dan nyalakan ulang
+
+Kalau langkah 3 gagal, aplikasi akan berhenti dengan pesan `Schema-validation`
+yang menyebut tabel atau kolom mana yang tidak cocok. Ini sudah diuji pada
+database yang dibentuk dengan `update`, dan hasilnya lolos — jadi kegagalan di
+sini biasanya berarti databasenya belum dibentuk sama sekali.
 
 Sesudah ini, setiap penambahan kolom baru dikerjakan sendiri dengan perintah
 `ALTER TABLE` sebelum versi barunya dinyalakan. Merepotkan, tetapi itulah yang
