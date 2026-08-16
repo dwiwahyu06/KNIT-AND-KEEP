@@ -1,65 +1,68 @@
 package com.knit_and_keep.backend.controller;
 
 import com.knit_and_keep.backend.model.CartItem;
+import com.knit_and_keep.backend.security.Sesi;
 import com.knit_and_keep.backend.service.CartService;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Keranjang belanja.
+ *
+ * Pemilik keranjang selalu diambil dari token, bukan dari isi permintaan,
+ * supaya tidak ada yang bisa mengubah keranjang orang lain dengan menukar
+ * nomor pelanggan.
+ */
 @RestController
 @RequestMapping("/api/cart")
+@CrossOrigin(origins = "http://localhost:5173")
 public class CartController {
 
-    @Autowired
-    private CartService cartService;
+    private final CartService cartService;
+
+    public CartController(CartService cartService) {
+        this.cartService = cartService;
+    }
 
     @GetMapping("/{pelangganId}")
-    public ResponseEntity<List<CartItem>> getCartItems(@PathVariable Long pelangganId) {
-        List<CartItem> items = cartService.getCartItems(pelangganId);
-        return ResponseEntity.ok(items);
+    public ResponseEntity<List<CartItem>> isi(@PathVariable Long pelangganId) {
+        Sesi.wajibPemilik(pelangganId);
+        return ResponseEntity.ok(cartService.getCartItems(pelangganId));
     }
 
     @PostMapping("/add")
-    public ResponseEntity<CartItem> addToCart(@RequestBody Map<String, Object> payload) {
-        Long pelangganId = Long.parseLong(payload.get("pelangganId").toString());
+    public ResponseEntity<CartItem> tambah(@RequestBody Map<String, Object> payload) {
+        Long pelangganId = pemilik(payload);
         Long productId = Long.parseLong(payload.get("productId").toString());
         int quantity = Integer.parseInt(payload.get("quantity").toString());
-        
-        CartItem newItem = cartService.addProductToCart(pelangganId, productId, quantity);
-        return ResponseEntity.ok(newItem);
+        return ResponseEntity.ok(cartService.addProductToCart(pelangganId, productId, quantity));
     }
 
-    /**
-     * ✅ ENDPOINT BARU: Untuk memperbarui quantity item (+ dan -).
-     * Method: PUT
-     * URL: /api/cart/update
-     * Body: { "pelangganId": 1, "productId": 123, "quantity": 3 }
-     */
     @PutMapping("/update")
-    public ResponseEntity<CartItem> updateCartItem(@RequestBody Map<String, Object> payload) {
-        Long pelangganId = Long.parseLong(payload.get("pelangganId").toString());
+    public ResponseEntity<CartItem> ubah(@RequestBody Map<String, Object> payload) {
+        Long pelangganId = pemilik(payload);
         Long productId = Long.parseLong(payload.get("productId").toString());
         int quantity = Integer.parseInt(payload.get("quantity").toString());
-
-        CartItem updatedItem = cartService.updateItemQuantity(pelangganId, productId, quantity);
-        return ResponseEntity.ok(updatedItem);
+        return ResponseEntity.ok(cartService.updateItemQuantity(pelangganId, productId, quantity));
     }
-    
-    /**
-     * ✅ ENDPOINT BARU: Untuk menghapus satu item dari keranjang (misal, tombol tong sampah).
-     * Method: DELETE
-     * URL: /api/cart/remove
-     * Body: { "pelangganId": 1, "productId": 123 }
-     */
-    @DeleteMapping("/remove")
-    public ResponseEntity<Void> removeCartItem(@RequestBody Map<String, Object> payload) {
-        Long pelangganId = Long.parseLong(payload.get("pelangganId").toString());
-        Long productId = Long.parseLong(payload.get("productId").toString());
 
+    @DeleteMapping("/remove")
+    public ResponseEntity<Void> hapus(@RequestBody Map<String, Object> payload) {
+        Long pelangganId = pemilik(payload);
+        Long productId = Long.parseLong(payload.get("productId").toString());
         cartService.removeItemFromCart(pelangganId, productId);
         return ResponseEntity.noContent().build();
+    }
+
+    /** Admin boleh menyebut pelanggan lain; pelanggan selalu dirinya sendiri. */
+    private Long pemilik(Map<String, Object> payload) {
+        Sesi.Pengguna pengguna = Sesi.wajibMasuk();
+        if (pengguna.admin() && payload.get("pelangganId") != null) {
+            return Long.parseLong(payload.get("pelangganId").toString());
+        }
+        return pengguna.id();
     }
 }

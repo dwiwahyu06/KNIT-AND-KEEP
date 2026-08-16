@@ -6,7 +6,6 @@ import com.knit_and_keep.backend.model.UserPelanggan;
 import com.knit_and_keep.backend.repository.CartRepository;
 import com.knit_and_keep.backend.repository.ProductRepository;
 import com.knit_and_keep.backend.repository.UserPelangganRepository;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,15 +13,27 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 
+/**
+ * Keranjang belanja.
+ *
+ * Jumlah yang diminta selalu diperiksa terhadap stok di sini, bukan hanya di
+ * tampilan. Sebelumnya permintaan langsung ke backend bisa memasukkan 10.000
+ * unit untuk barang yang stoknya 10.
+ */
 @Service
 public class CartService {
 
-    @Autowired
-    private CartRepository cartRepository;
-    @Autowired
-    private ProductRepository productRepository;
-    @Autowired
-    private UserPelangganRepository userPelangganRepository;
+    private final CartRepository cartRepository;
+    private final ProductRepository productRepository;
+    private final UserPelangganRepository userPelangganRepository;
+
+    public CartService(CartRepository cartRepository,
+                       ProductRepository productRepository,
+                       UserPelangganRepository userPelangganRepository) {
+        this.cartRepository = cartRepository;
+        this.productRepository = productRepository;
+        this.userPelangganRepository = userPelangganRepository;
+    }
 
     public List<CartItem> getCartItems(Long pelangganId) {
         return cartRepository.findByPelangganId(pelangganId);
@@ -30,55 +41,64 @@ public class CartService {
 
     @Transactional
     public CartItem addProductToCart(Long pelangganId, Long productId, int quantity) {
-        CartItem cartItem = cartRepository.findByPelangganIdAndProductId(pelangganId, productId)
-            .orElse(new CartItem());
+        if (quantity <= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Jumlah harus lebih dari nol");
+        }
 
-        if (cartItem.getId() == null) {
-            Product product = productRepository.findById(productId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Produk tidak ditemukan"));
+        Product produk = ambilProduk(productId);
+        CartItem item = cartRepository.findByPelangganIdAndProductId(pelangganId, productId)
+                .orElse(null);
+
+        int jumlahBaru = (item == null ? 0 : item.getQuantity()) + quantity;
+        periksaStok(produk, jumlahBaru);
+
+        if (item == null) {
             UserPelanggan pelanggan = userPelangganRepository.findById(pelangganId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Pelanggan tidak ditemukan"));
-            
-            cartItem.setProduct(product);
-            cartItem.setPelanggan(pelanggan);
-            cartItem.setQuantity(quantity);
-        } else {
-            cartItem.setQuantity(cartItem.getQuantity() + quantity);
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Pelanggan tidak ditemukan"));
+            item = new CartItem();
+            item.setProduct(produk);
+            item.setPelanggan(pelanggan);
         }
-
-        return cartRepository.save(cartItem);
+        item.setQuantity(jumlahBaru);
+        return cartRepository.save(item);
     }
 
-    /**
-     * ✅ FUNGSI BARU: Memperbarui jumlah item di keranjang.
-     * Jika jumlah menjadi 0 atau kurang, item akan dihapus.
-     */
     @Transactional
-    public CartItem updateItemQuantity(Long pelangganId, Long productId, int newQuantity) {
-        CartItem cartItem = cartRepository.findByPelangganIdAndProductId(pelangganId, productId)
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Item tidak ditemukan di keranjang"));
+    public CartItem updateItemQuantity(Long pelangganId, Long productId, int jumlahBaru) {
+        CartItem item = cartRepository.findByPelangganIdAndProductId(pelangganId, productId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Barang ini tidak ada di keranjang Anda"));
 
-        if (newQuantity <= 0) {
-            // Jika quantity 0 atau kurang, hapus item dari keranjang
-            cartRepository.delete(cartItem);
-            return null; // Mengindikasikan item telah dihapus
-        } else {
-            // Di sini Anda bisa menambahkan validasi stok jika perlu
-            // if (newQuantity > cartItem.getProduct().getStock()) {
-            //     throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Stok tidak mencukupi");
-            // }
-            cartItem.setQuantity(newQuantity);
-            return cartRepository.save(cartItem);
+        if (jumlahBaru <= 0) {
+            cartRepository.delete(item);
+            return null;
         }
+
+        periksaStok(ambilProduk(productId), jumlahBaru);
+        item.setQuantity(jumlahBaru);
+        return cartRepository.save(item);
     }
 
-    /**
-     * ✅ FUNGSI BARU: Menghapus satu item sepenuhnya dari keranjang.
-     */
+    @Transactional
     public void removeItemFromCart(Long pelangganId, Long productId) {
-        CartItem cartItem = cartRepository.findByPelangganIdAndProductId(pelangganId, productId)
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Item tidak ditemukan di keranjang"));
-        
-        cartRepository.delete(cartItem);
+        cartRepository.findByPelangganIdAndProductId(pelangganId, productId)
+                .ifPresent(cartRepository::delete);
+    }
+
+    private Product ambilProduk(Long productId) {
+        return productRepository.findById(productId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Produk tidak ditemukan"));
+    }
+
+    private void periksaStok(Product produk, int diminta) {
+        int tersedia = produk.getStock() == null ? 0 : produk.getStock();
+        if (tersedia == 0) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    produk.getName() + " sedang habis.");
+        }
+        if (diminta > tersedia) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Stok " + produk.getName() + " tinggal " + tersedia + " unit.");
+        }
     }
 }
