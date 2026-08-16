@@ -14,9 +14,23 @@ WORKDIR /app
 
 # Berjalan sebagai pengguna biasa, bukan root.
 RUN useradd --create-home --shell /bin/bash aplikasi
-USER aplikasi
 
-COPY --from=pembangun /app/target/*.jar aplikasi.jar
+# Folder foto disiapkan selagi masih root, lalu diserahkan ke pengguna aplikasi.
+#
+# Tanpa ini aplikasi menolak menyala di server: UNGGAHAN_FOLDER menunjuk
+# /data/unggahan, sedangkan pengguna biasa tidak boleh membuat folder di akar
+# sistem berkas. Akibatnya kontainer berjalan tetapi aplikasinya mati, dan
+# pemeriksaan kesehatan gagal tanpa penyebab yang kelihatan.
+#
+# Di Railway atau Render, volume permanen dipasang tepat di /data — jadi
+# folder ini menjadi titik pasangnya, dan isinya bertahan antar pembaruan.
+RUN mkdir -p /data/unggahan && chown -R aplikasi:aplikasi /data
+
+# Jar disalin dengan kepemilikan yang benar, supaya tetap terbaca setelah
+# berganti pengguna.
+COPY --from=pembangun --chown=aplikasi:aplikasi /app/target/*.jar aplikasi.jar
+
+USER aplikasi
 
 # Layanan hosting biasanya menentukan sendiri porta lewat variabel PORT.
 ENV PORT=8080
