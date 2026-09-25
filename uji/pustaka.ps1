@@ -39,7 +39,16 @@ function GetArr($u, $token = $null) {
     try {
         $r = Invoke-WebRequest -Uri $u -Method GET -Headers (Hdr $token) -UseBasicParsing
         if (-not $r.Content) { return @() }
-        return @($r.Content | ConvertFrom-Json)
+        $data = $r.Content | ConvertFrom-Json
+
+        # ConvertFrom-Json mengeluarkan larik JSON sebagai satu objek larik, bukan
+        # sebagai aliran elemen. Kalau langsung dibungkus @(), hasilnya daftar
+        # berisi satu elemen yang isinya larik aslinya. Pemeriksaan sesudahnya
+        # lalu membaca properti larik - Count, Length, Rank - dan bukan isi
+        # datanya, sehingga uji bisa lulus tanpa benar-benar memeriksa apa pun.
+        $keluar = @()
+        foreach ($x in $data) { $keluar += $x }
+        return ,$keluar
     } catch { throw "GET $u gagal: $(PesanGalat $_)" }
 }
 
