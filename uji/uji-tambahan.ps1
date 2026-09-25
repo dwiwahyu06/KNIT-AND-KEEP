@@ -220,7 +220,7 @@ Cek "gambar rusak ditolak" ($h.kode -eq 400) $h.pesan
 
 # ---------------------------------------------------------------------------
 Bagian "9. Halaman baru termuat"
-foreach ($h in "/Analisis", "/alamat-form/$($alamat.id)", "/Registrasi") {
+foreach ($h in "/Analisis", "/AdminTestimoni", "/alamat-form/$($alamat.id)", "/Registrasi") {
     try {
         $r = Invoke-WebRequest "$F$h" -UseBasicParsing -TimeoutSec 15
         Cek "halaman $h termuat" ($r.StatusCode -eq 200)
@@ -280,7 +280,126 @@ $h = Coba GET "http://localhost:8080$($sebelumHapus.image)"
 Cek "menghapus produk ikut membuang fotonya" ($h.kode -eq 404) "HTTP $($h.kode)"
 
 # ---------------------------------------------------------------------------
-Bagian "11. Kesiapan operasi jangka panjang"
+Bagian "11. Testimoni dan penilaian pelanggan"
+
+$produkNilai = BuatProduk $admin "Cardigan Uji Testimoni" 4
+$pesananNilai = Checkout $pelanggan $produkNilai.id 1 $alamat
+
+# Penilaian sebelum barang diterima tidak ada isinya.
+$h = Coba POST "$B/testimoni" @{
+    transactionId = [int]$pesananNilai.id; rating = 5; ulasan = "belum sampai"
+} $pelanggan.token
+Cek "pesanan yang belum selesai tidak bisa dinilai" ($h.kode -eq 400) $h.pesan
+
+Post1 "$B/orders/admin/$($pesananNilai.id)/konfirmasi-pembayaran" @{ metodeBayar = "TUNAI" } $admin | Out-Null
+Put1 "$B/orders/admin/update/$($pesananNilai.id)" @{
+    status = "DIKIRIM"; nomorResi = "NILAI123456"; kurir = "tiki"
+} $admin | Out-Null
+$selesai = Post1 "$B/orders/$($pesananNilai.id)/terima" @{} $pelanggan.token
+Cek "pesanan sampai di status selesai" ($selesai.status -eq "SELESAI") $selesai.status
+
+$h = Coba POST "$B/testimoni" @{ transactionId = [int]$pesananNilai.id; rating = 9 } $pelanggan.token
+Cek "bintang di luar 1-5 ditolak" ($h.kode -eq 400) $h.pesan
+
+$ringkasSebelum = Get1 "$B/testimoni/ringkasan"
+$testimoni = Post1 "$B/testimoni" @{
+    transactionId = [int]$pesananNilai.id
+    rating        = 5
+    ulasan        = "Rajutannya masih tebal dan tidak bau apek, sesuai foto."
+} $pelanggan.token
+Cek "pesanan selesai bisa dinilai" ($testimoni.rating -eq 5)
+Cek "testimoni langsung tampil di toko" ($testimoni.ditampilkan -eq $true)
+
+# Satu pesanan satu penilaian. Tanpa ini rata-rata bintang bisa didorong naik
+# hanya dengan mengirim ulang penilaian yang sama.
+$h = Coba POST "$B/testimoni" @{ transactionId = [int]$pesananNilai.id; rating = 5 } $pelanggan.token
+Cek "satu pesanan tidak bisa dinilai dua kali" ($h.kode -eq 400) $h.pesan
+
+$diubah = Put1 "$B/testimoni/$($testimoni.id)" @{
+    rating = 4; ulasan = "Bagus, tapi kirimnya agak lama."
+} $pelanggan.token
+Cek "pemilik boleh memperbaiki penilaiannya" ($diubah.rating -eq 4)
+
+$orangLain = BuatPelangganBaru
+$h = Coba PUT "$B/testimoni/$($testimoni.id)" @{ rating = 1 } $orangLain.token
+Cek "pelanggan lain tidak bisa mengubah penilaian orang" ($h.kode -eq 403) $h.pesan
+
+$h = Coba PUT "$B/testimoni/$($testimoni.id)/tampilkan" @{ tampil = $false } $orangLain.token
+Cek "pelanggan tidak bisa memoderasi testimoni" ($h.kode -eq 403) $h.pesan
+
+$h = Coba GET "$B/testimoni"
+Cek "daftar moderasi tidak terbuka tanpa masuk" ($h.kode -eq 401) $h.pesan
+
+# --- yang dibaca pengunjung yang belum punya akun ---
+$publik = @(GetArr "$B/testimoni/publik?batas=20")
+$milikKita = $publik | Where-Object { $_.id -eq $testimoni.id } | Select-Object -First 1
+Cek "testimoni terbaca tanpa perlu masuk" ($null -ne $milikKita)
+
+# Nama diperiksa berdasarkan bentuknya, bukan dicocokkan huruf per huruf:
+# PowerShell 5.1 membaca badan jawaban sebagai Latin-1, jadi titik penyamar
+# yang sebenarnya satu karakter UTF-8 sampai di sini dalam keadaan teracak.
+Cek "nama penulis disamarkan" ($milikKita.namaPelanggan -match '^pe[^a-zA-Z0-9]') $milikKita.namaPelanggan
+Cek "nama asli tidak ikut terbawa" ($milikKita.namaPelanggan -ne "pelanggan")
+
+# Nomor pesanan di halaman umum adalah data pembelian yang tidak ada urusannya
+# dengan calon pembeli - dan membatalkan gunanya menyamarkan nama.
+$mentahPublik = (Invoke-WebRequest "$B/testimoni/publik?batas=20" -UseBasicParsing).Content
+Cek "nomor pesanan tidak bocor ke halaman umum" ($mentahPublik -notlike '*"orderId"*')
+Cek "id pelanggan tidak bocor ke halaman umum" ($mentahPublik -notlike '*"pelangganId"*')
+
+$ringkasSesudah = Get1 "$B/testimoni/ringkasan"
+Cek "jumlah penilaian bertambah" ($ringkasSesudah.jumlah -gt $ringkasSebelum.jumlah) `
+    "$($ringkasSebelum.jumlah) -> $($ringkasSesudah.jumlah)"
+Cek "rata-rata bintang masuk akal" (
+    $ringkasSesudah.rataRata -ge 1 -and $ringkasSesudah.rataRata -le 5) $ringkasSesudah.rataRata
+
+# --- ulasan ditelusuri lewat pesanan, bukan disimpan di produk ---
+$diProduk = Get1 "$B/testimoni/produk/$($produkNilai.id)"
+Cek "ulasan muncul di barang yang dibeli" (@($diProduk.daftar | Where-Object { $_.id -eq $testimoni.id }).Count -eq 1)
+
+$produkLain = BuatProduk $admin "Barang Tanpa Ulasan" 2
+$kosongUlasan = Get1 "$B/testimoni/produk/$($produkLain.id)"
+Cek "barang lain tidak ikut kebagian ulasan" ($kosongUlasan.ringkasan.jumlah -eq 0)
+
+# --- moderasi oleh pengelola ---
+$dibalas = Put1 "$B/testimoni/$($testimoni.id)/balas" @{
+    balasanAdmin = "Terima kasih. Maaf kirimnya terlambat, sudah kami perbaiki."
+} $admin
+Cek "admin bisa membalas testimoni" ($dibalas.balasanAdmin -like "*Terima kasih*")
+
+Put1 "$B/testimoni/$($testimoni.id)/tampilkan" @{ tampil = $false } $admin | Out-Null
+$publikSesudah = @(GetArr "$B/testimoni/publik?batas=20")
+Cek "testimoni yang disembunyikan hilang dari halaman umum" (
+    @($publikSesudah | Where-Object { $_.id -eq $testimoni.id }).Count -eq 0)
+
+# Disembunyikan dari umum, bukan disita dari penulisnya.
+$punyaSaya = @(GetArr "$B/testimoni/user/$($pelanggan.id)" $pelanggan.token)
+Cek "penulis tetap melihat penilaiannya sendiri" (
+    @($punyaSaya | Where-Object { $_.id -eq $testimoni.id }).Count -eq 1)
+
+$tersembunyi = @(GetArr "$B/testimoni?tampil=false" $admin)
+Cek "saringan testimoni tersembunyi bekerja" (
+    @($tersembunyi | Where-Object { $_.id -eq $testimoni.id }).Count -eq 1)
+
+# --- penjualan di kasir toko tidak punya penilai ---
+$offlineNilai = Post1 "$B/orders/admin/offline" @{
+    items = @(@{ productId = $produkNilai.id; quantity = 1 })
+    namaPelanggan = "Offline"; metodeBayar = "TUNAI"
+} $admin
+$h = Coba POST "$B/testimoni" @{ transactionId = [int]$offlineNilai.id; rating = 5 } $admin
+Cek "penjualan kasir tidak bisa dinilai" ($h.kode -eq 400) $h.pesan
+Cek "pesanannya tetap diakui ada" ($h.pesan -notlike "*tidak ditemukan*") $h.pesan
+
+$h = Coba POST "$B/testimoni" @{ transactionId = 99999999; rating = 5 } $pelanggan.token
+Cek "pesanan yang memang tidak ada dijawab 404" ($h.kode -eq 404) $h.pesan
+
+Del1 "$B/testimoni/$($testimoni.id)" $admin | Out-Null
+$sesudahHapus = @(GetArr "$B/testimoni" $admin)
+Cek "admin bisa menghapus testimoni" (
+    @($sesudahHapus | Where-Object { $_.id -eq $testimoni.id }).Count -eq 0)
+
+# ---------------------------------------------------------------------------
+Bagian "12. Kesiapan operasi jangka panjang"
 
 # Dipanggil layanan pemantauan dari luar, jadi harus terjawab tanpa token.
 $sehat = Get1 "$B/kesehatan"

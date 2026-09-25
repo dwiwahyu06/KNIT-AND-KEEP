@@ -20,6 +20,7 @@ const MENU = [
       { ke: "/AdminOrdersPage", label: "Pesanan", ikon: "▤" },
       { ke: "/Kasir", label: "Kasir Offline", ikon: "◨" },
       { ke: "/AdminRetur", label: "Komplain & Retur", ikon: "⟲" },
+      { ke: "/AdminTestimoni", label: "Testimoni", ikon: "★" },
     ],
   },
   {

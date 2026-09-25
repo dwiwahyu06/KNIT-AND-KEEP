@@ -52,6 +52,11 @@ public class PenjagaAkses implements Filter {
             new Aturan("GET",  "/api/shipping/cari-tujuan",        Butuh.SIAPA_SAJA),
             new Aturan("GET",  "/api/shipping/ongkir",             Butuh.SIAPA_SAJA),
             new Aturan("GET",  "/api/retur/jenis-kendala",         Butuh.SIAPA_SAJA),
+            // Bintang dan testimoni ikut jadi bahan pertimbangan sebelum orang
+            // membuat akun, jadi harus terbaca oleh pengunjung yang belum masuk.
+            new Aturan("GET",  "/api/testimoni/publik",            Butuh.SIAPA_SAJA),
+            new Aturan("GET",  "/api/testimoni/ringkasan",         Butuh.SIAPA_SAJA),
+            new Aturan("GET",  "/api/testimoni/produk/*",          Butuh.SIAPA_SAJA),
             // Dipanggil layanan pemantauan dari luar, jadi tidak bisa membawa token.
             new Aturan("GET",  "/api/kesehatan",                   Butuh.SIAPA_SAJA),
 
@@ -71,6 +76,10 @@ public class PenjagaAkses implements Filter {
             new Aturan("GET",  "/api/shipping/lacak",              Butuh.ADMIN),
             new Aturan("PUT",  "/api/retur/**",                    Butuh.ADMIN),
             new Aturan("GET",  "/api/retur",                       Butuh.ADMIN),
+            new Aturan("GET",  "/api/testimoni",                   Butuh.ADMIN),
+            new Aturan("PUT",  "/api/testimoni/*/tampilkan",       Butuh.ADMIN),
+            new Aturan("PUT",  "/api/testimoni/*/balas",           Butuh.ADMIN),
+            new Aturan("DELETE", "/api/testimoni/**",            Butuh.ADMIN),
 
             // Melihat katalog bebas, mengubahnya tidak.
             new Aturan("GET",  "/api/products/**",                 Butuh.SIAPA_SAJA),
@@ -80,6 +89,7 @@ public class PenjagaAkses implements Filter {
             new Aturan("*",    "/api/cart/**",                     Butuh.SUDAH_MASUK),
             new Aturan("*",    "/api/orders/**",                   Butuh.SUDAH_MASUK),
             new Aturan("*",    "/api/retur/**",                    Butuh.SUDAH_MASUK),
+            new Aturan("*",    "/api/testimoni/**",                Butuh.SUDAH_MASUK),
             new Aturan("*",    "/api/addresses/**",                Butuh.SUDAH_MASUK),
             new Aturan("*",    "/api/pelanggan/**",                Butuh.SUDAH_MASUK),
             new Aturan("*",    "/api/payments/**",                 Butuh.SUDAH_MASUK),

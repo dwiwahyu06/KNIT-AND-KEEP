@@ -3,6 +3,8 @@ import { Link, NavLink, useNavigate } from "react-router-dom";
 import { keranjangApi } from "../lib/api";
 import { keluar, pelangganId, pelangganNama } from "../lib/session";
 import Pemberitahuan from "./Pemberitahuan";
+import { WaMelayang } from "./TombolWa";
+import { nomorTampil, tautanWa } from "../lib/cs";
 
 const MENU = [
   { ke: "/products", label: "Katalog" },
@@ -117,9 +119,24 @@ export default function ShopLayout({ children, lebar = "max-w-6xl" }) {
       <footer className="border-t border-sand-200 bg-white">
         <div className={`mx-auto ${lebar} flex flex-wrap items-center justify-between gap-3 px-4 py-5 text-xs text-sand-400 sm:px-6`}>
           <span>Knit &amp; Keep — thrifting rajut dan pakaian bekas layak pakai.</span>
-          <span>Butuh bantuan? Ajukan komplain lewat halaman Pesanan Saya.</span>
+          <span>
+            Butuh bantuan? Ajukan komplain lewat halaman Pesanan Saya, atau chat CS di{" "}
+            <a
+              href={tautanWa()}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-semibold text-leaf-500 hover:underline"
+            >
+              {nomorTampil()}
+            </a>
+            .
+          </span>
         </div>
       </footer>
+
+      {/* Ikut di seluruh halaman pelanggan: pertanyaan bisa muncul di mana saja,
+          bukan cuma di halaman pesanan. */}
+      <WaMelayang />
     </div>
   );
 }

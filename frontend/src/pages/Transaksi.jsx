@@ -1,11 +1,16 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import ShopLayout from "../components/ShopLayout";
+import { Bintang, PilihBintang } from "../components/Bintang";
+import TombolWa from "../components/TombolWa";
 import {
   AreaTeks, Chip, Dialog, Galat, Isian, JudulHalaman, Kartu, Kosong,
   Memuat, Pilihan, Tombol,
 } from "../components/ui";
-import { pembayaranApi, pengirimanApi, pesananApi, returApi } from "../lib/api";
+import {
+  pembayaranApi, pengirimanApi, pesananApi, returApi, testimoniApi,
+} from "../lib/api";
+import { PESAN_CS } from "../lib/cs";
 import { ALUR_UTAMA, labelStatus, rupiah, tanggal, warnaStatus } from "../lib/format";
 import { pelangganId } from "../lib/session";
 
@@ -19,6 +24,11 @@ export default function TransaksiPage() {
   const [pesan, setPesan] = useState("");
   const [sibuk, setSibuk] = useState(false);
 
+  // Penilaian disimpan per pesanan: { [transactionId]: testimoni }
+  const [penilaian, setPenilaian] = useState({});
+  const [beriNilai, setBeriNilai] = useState(null);
+  const [formNilai, setFormNilai] = useState({ rating: 0, ulasan: "" });
+
   const [jenisKendala, setJenisKendala] = useState([]);
   const [komplain, setKomplain] = useState(null);
   const [formKomplain, setFormKomplain] = useState({
@@ -26,6 +36,16 @@ export default function TransaksiPage() {
     alasan: "",
     fotoBukti: "",
   });
+
+  const ambilPenilaian = useCallback(async () => {
+    if (!id) return;
+    try {
+      const daftar = await testimoniApi.milikSaya(id);
+      setPenilaian(Object.fromEntries(daftar.map((t) => [t.transactionId, t])));
+    } catch {
+      /* penilaian cuma pelengkap — daftar pesanan tetap harus tampil */
+    }
+  }, [id]);
 
   const ambil = useCallback(async () => {
     if (!id) return;
@@ -38,7 +58,8 @@ export default function TransaksiPage() {
     } finally {
       setMemuat(false);
     }
-  }, [id]);
+    ambilPenilaian();
+  }, [id, ambilPenilaian]);
 
   useEffect(() => {
     ambil();
@@ -75,6 +96,39 @@ export default function TransaksiPage() {
       await pesananApi.terimaBarang(p.id, id);
       setPesan("Terima kasih, pesanan ditandai selesai.");
       await ambil();
+    } catch (e) {
+      setGalat(e.message);
+    } finally {
+      setSibuk(false);
+    }
+  };
+
+  const bukaPenilaian = (p) => {
+    const lama = penilaian[p.id];
+    setFormNilai({ rating: lama?.rating || 0, ulasan: lama?.ulasan || "" });
+    setBeriNilai(p);
+  };
+
+  const kirimPenilaian = async () => {
+    setSibuk(true);
+    setGalat("");
+    try {
+      const lama = penilaian[beriNilai.id];
+      // Pesanan yang sudah pernah dinilai diperbarui, bukan ditumpuk: satu
+      // pesanan satu penilaian, supaya rata-rata bintang tidak bisa didorong
+      // naik dengan mengirim ulang.
+      if (lama) {
+        await testimoniApi.ubah(lama.id, formNilai);
+      } else {
+        await testimoniApi.kirim({ transactionId: beriNilai.id, ...formNilai });
+      }
+      setBeriNilai(null);
+      setPesan(
+        lama
+          ? "Penilaian Anda diperbarui. Terima kasih."
+          : "Terima kasih, penilaian Anda sudah kami terima."
+      );
+      await ambilPenilaian();
     } catch (e) {
       setGalat(e.message);
     } finally {
@@ -131,7 +185,7 @@ export default function TransaksiPage() {
     <ShopLayout>
       <JudulHalaman
         judul="Pesanan Saya"
-        keterangan="Pantau perjalanan pesanan dari pembayaran sampai barang diterima. Kalau ada kendala, ajukan komplain dari sini."
+        keterangan="Pantau perjalanan pesanan dari pembayaran sampai barang diterima. Kalau ada kendala, ajukan komplain dari sini — dan kalau puas, beri penilaian setelah pesanan selesai."
       />
 
       {pesan && (
@@ -156,13 +210,59 @@ export default function TransaksiPage() {
               key={p.id}
               pesanan={p}
               sibuk={sibuk}
+              penilaian={penilaian[p.id]}
               onTerima={() => terima(p)}
               onKomplain={() => setKomplain(p)}
               onCekBayar={() => cekPembayaran(p)}
+              onBeriNilai={() => bukaPenilaian(p)}
             />
           ))}
         </div>
       )}
+
+      <Dialog
+        terbuka={!!beriNilai}
+        onTutup={() => setBeriNilai(null)}
+        judul={penilaian[beriNilai?.id] ? "Ubah penilaian" : "Beri penilaian"}
+        keterangan={beriNilai ? `Pesanan ${beriNilai.orderId}` : ""}
+      >
+        <div className="space-y-4">
+          <Isian label="Seberapa puas Anda?" wajib>
+            <PilihBintang
+              nilai={formNilai.rating}
+              onPilih={(r) => setFormNilai({ ...formNilai, rating: r })}
+            />
+          </Isian>
+
+          <Isian
+            label="Ceritakan pengalamannya"
+            hint="Boleh dikosongkan. Kondisi barang, kecepatan pengiriman, dan pelayanan paling membantu pembeli berikutnya."
+          >
+            <AreaTeks
+              value={formNilai.ulasan}
+              onChange={(e) => setFormNilai({ ...formNilai, ulasan: e.target.value })}
+              maxLength={1024}
+              placeholder="Contoh: Rajutannya masih tebal dan tidak bau apek, sesuai foto. Dikirim sehari setelah dibayar."
+            />
+          </Isian>
+
+          <p className="rounded-lg bg-sand-100 px-3 py-2.5 text-xs text-sand-500">
+            Penilaian tampil di halaman depan toko. Nama Anda disamarkan,
+            misalnya {`"dw•••"`}.
+          </p>
+
+          <div className="flex gap-2">
+            <Tombol
+              className="flex-1"
+              onClick={kirimPenilaian}
+              disabled={sibuk || !formNilai.rating}
+            >
+              {sibuk ? "Mengirim…" : "Kirim penilaian"}
+            </Tombol>
+            <Tombol variant="halus" onClick={() => setBeriNilai(null)}>Batal</Tombol>
+          </div>
+        </div>
+      </Dialog>
 
       <Dialog
         terbuka={!!komplain}
@@ -226,7 +326,9 @@ export default function TransaksiPage() {
   );
 }
 
-function KartuPesanan({ pesanan, sibuk, onTerima, onKomplain, onCekBayar }) {
+function KartuPesanan({
+  pesanan, sibuk, penilaian, onTerima, onKomplain, onCekBayar, onBeriNilai,
+}) {
   const [buka, setBuka] = useState(false);
   const bermasalah = !ALUR_UTAMA.includes(pesanan.status) && pesanan.status !== "DIBATALKAN";
   const indeks = ALUR_UTAMA.indexOf(pesanan.status);
@@ -234,6 +336,9 @@ function KartuPesanan({ pesanan, sibuk, onTerima, onKomplain, onCekBayar }) {
   const bolehKomplain = ["DIPROSES", "DIKIRIM", "SELESAI"].includes(pesanan.status);
   const bolehTerima = pesanan.status === "DIKIRIM";
   const belumBayar = pesanan.status === "MENUNGGU_PEMBAYARAN";
+  // Menilai barang yang belum sampai tidak ada isinya. Pesanan yang batal pun
+  // tidak pernah jadi pengalaman belanja yang bisa dinilai.
+  const bolehMenilai = pesanan.status === "SELESAI";
 
   // --- pelacakan paket ke kurir ---
   const [lacak, setLacak] = useState(null);
@@ -352,6 +457,26 @@ function KartuPesanan({ pesanan, sibuk, onTerima, onKomplain, onCekBayar }) {
         <p className="mt-3 rounded-lg bg-amber-100/60 px-3 py-2 text-sm text-amber-ui">{galatLacak}</p>
       )}
 
+      {penilaian && (
+        <div className="mt-4 rounded-lg border border-wool-100 bg-wool-50 px-4 py-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <Bintang nilai={penilaian.rating} ukuran="sm" />
+            <span className="text-xs text-sand-500">
+              Anda menilai pesanan ini pada {tanggal(penilaian.createdAt)}
+            </span>
+          </div>
+          {penilaian.ulasan && (
+            <p className="mt-2 whitespace-pre-line text-sm text-sand-600">{penilaian.ulasan}</p>
+          )}
+          {penilaian.balasanAdmin && (
+            <p className="mt-2 rounded-md bg-white/70 px-3 py-2 text-sm text-sand-600">
+              <span className="font-semibold text-sand-700">Balasan toko: </span>
+              {penilaian.balasanAdmin}
+            </p>
+          )}
+        </div>
+      )}
+
       <div className="mt-4 flex flex-wrap gap-2">
         {belumBayar && (
           <Tombol size="sm" onClick={onCekBayar} disabled={sibuk}>
@@ -366,11 +491,21 @@ function KartuPesanan({ pesanan, sibuk, onTerima, onKomplain, onCekBayar }) {
         {bolehTerima && (
           <Tombol size="sm" onClick={onTerima} disabled={sibuk}>Barang sudah diterima</Tombol>
         )}
+        {bolehMenilai && (
+          <Tombol size="sm" variant="aksen" onClick={onBeriNilai} disabled={sibuk}>
+            {penilaian ? "Ubah penilaian" : "Beri penilaian"}
+          </Tombol>
+        )}
         {bolehKomplain && (
           <Tombol size="sm" variant="garis" onClick={onKomplain} disabled={sibuk}>
             Ada kendala
           </Tombol>
         )}
+        {/* Nomor pesanan ikut terbawa ke percakapan, jadi admin tidak perlu
+            menanyakannya lebih dulu. */}
+        <TombolWa size="sm" variant="halus" pesan={PESAN_CS.pesanan(pesanan)}>
+          Tanya CS
+        </TombolWa>
         <Tombol size="sm" variant="halus" onClick={() => setBuka((b) => !b)}>
           {buka ? "Sembunyikan rincian" : "Lihat rincian"}
         </Tombol>

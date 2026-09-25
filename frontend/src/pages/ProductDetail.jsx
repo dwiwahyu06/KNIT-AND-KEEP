@@ -1,8 +1,12 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import ShopLayout from "../components/ShopLayout";
+import { Bintang } from "../components/Bintang";
+import KartuTestimoni from "../components/KartuTestimoni";
+import TombolWa from "../components/TombolWa";
 import { Chip, Galat, Kartu, Kosong, Memuat, Tombol } from "../components/ui";
-import { keranjangApi, produkApi, urlBerkas } from "../lib/api";
+import { keranjangApi, produkApi, testimoniApi, urlBerkas } from "../lib/api";
+import { PESAN_CS } from "../lib/cs";
 import { rupiah } from "../lib/format";
 import { pelangganId } from "../lib/session";
 
@@ -20,6 +24,7 @@ export default function ProductDetail() {
 
   const [produk, setProduk] = useState(null);
   const [serupa, setSerupa] = useState([]);
+  const [ulasan, setUlasan] = useState({ ringkasan: null, daftar: [] });
   const [jumlah, setJumlah] = useState(1);
   const [memuat, setMemuat] = useState(true);
   const [galat, setGalat] = useState("");
@@ -33,6 +38,14 @@ export default function ProductDetail() {
     try {
       const p = await produkApi.detail(id);
       setProduk(p);
+
+      // Ulasan menyusul sendiri: katalog tetap terbaca meski tabelnya kosong
+      // atau permintaannya gagal.
+      testimoniApi
+        .produk(p.id)
+        .then((u) => setUlasan({ ringkasan: u.ringkasan, daftar: u.daftar || [] }))
+        .catch(() => setUlasan({ ringkasan: null, daftar: [] }));
+
       const semua = await produkApi.semua("?sort=newest");
       setSerupa(
         semua
@@ -123,6 +136,16 @@ export default function ProductDetail() {
 
           <p className="tabular text-3xl font-bold text-brand-600">{rupiah(produk.sellPrice)}</p>
 
+          {ulasan.ringkasan?.jumlah > 0 && (
+            <a href="#ulasan" className="flex items-center gap-2 text-sm text-sand-500 hover:text-brand-600">
+              <Bintang nilai={ulasan.ringkasan.rataRata} ukuran="sm" />
+              <span className="tabular font-semibold text-sand-700">
+                {ulasan.ringkasan.rataRata.toString().replace(".", ",")}
+              </span>
+              <span>· {ulasan.ringkasan.jumlah} ulasan</span>
+            </a>
+          )}
+
           <div className="flex flex-wrap gap-2">
             {produk.size && <Chip className="bg-sand-200 text-sand-600">Ukuran {produk.size}</Chip>}
             {produk.color && <Chip className="bg-sand-200 text-sand-600">{produk.color}</Chip>}
@@ -182,8 +205,50 @@ export default function ProductDetail() {
               Barang ini sudah terjual. Barang thrifting biasanya hanya ada satu.
             </p>
           )}
+
+          {/* Foto dan keterangan tidak selalu menjawab semuanya — apalagi untuk
+              barang bekas, yang tiap helainya punya cacat dan bekas pakai
+              sendiri. Pertanyaan yang tak terjawab berujung keranjang
+              ditinggalkan, bukan pesanan. */}
+          <div className="flex items-center gap-3 rounded-lg border border-leaf-100 bg-leaf-100/40 px-4 py-3">
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-sand-700">
+                {habis ? "Ketinggalan barang ini?" : "Masih ragu dengan kondisinya?"}
+              </p>
+              <p className="text-xs text-sand-500">
+                {habis
+                  ? "Tanya CS kalau mau dicarikan barang serupa di stok berikutnya."
+                  : "Minta foto tambahan atau ukuran detail langsung ke CS toko."}
+              </p>
+            </div>
+            <TombolWa size="sm" pesan={PESAN_CS.produk(produk, habis)}>
+              Tanya CS
+            </TombolWa>
+          </div>
         </div>
       </div>
+
+      {ulasan.daftar.length > 0 && (
+        <section id="ulasan" className="mt-12 scroll-mt-20">
+          <div className="mb-4 flex flex-wrap items-center gap-3">
+            <h2 className="display text-xl font-bold text-sand-800">Kata pembelinya</h2>
+            {ulasan.ringkasan?.jumlah > 0 && (
+              <span className="flex items-center gap-2 text-sm text-sand-500">
+                <Bintang nilai={ulasan.ringkasan.rataRata} ukuran="sm" />
+                {ulasan.ringkasan.rataRata.toString().replace(".", ",")} dari{" "}
+                {ulasan.ringkasan.jumlah} penilaian
+              </span>
+            )}
+          </div>
+          {/* Penilaian menempel ke pesanan, bukan ke barang. Yang muncul di sini
+              adalah penilaian dari pesanan yang memuat barang ini. */}
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {ulasan.daftar.map((t) => (
+              <KartuTestimoni key={t.id} testimoni={t} denganBarang={false} />
+            ))}
+          </div>
+        </section>
+      )}
 
       {serupa.length > 0 && (
         <section className="mt-12">

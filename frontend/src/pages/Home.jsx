@@ -1,11 +1,17 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { produkApi, urlBerkas } from "../lib/api";
+import { Bintang } from "../components/Bintang";
+import KartuTestimoni from "../components/KartuTestimoni";
+import TombolWa, { WaMelayang } from "../components/TombolWa";
+import { produkApi, testimoniApi, urlBerkas } from "../lib/api";
+import { nomorTampil } from "../lib/cs";
 import { rupiah } from "../lib/format";
 import { adminSaatIni, pelangganId } from "../lib/session";
 
 export default function Home() {
   const [produk, setProduk] = useState([]);
+  const [testimoni, setTestimoni] = useState([]);
+  const [nilaiToko, setNilaiToko] = useState(null);
   const sudahMasuk = pelangganId();
   const admin = adminSaatIni();
 
@@ -14,6 +20,11 @@ export default function Home() {
       .semua("?sort=newest")
       .then((p) => setProduk(p.filter((x) => (x.stock || 0) > 0).slice(0, 6)))
       .catch(() => setProduk([]));
+
+    // Halaman depan tetap utuh walau belum ada satu pun testimoni, atau kalau
+    // permintaannya gagal — bagiannya sekadar tidak digambar.
+    testimoniApi.publik(6).then(setTestimoni).catch(() => setTestimoni([]));
+    testimoniApi.ringkasan().then(setNilaiToko).catch(() => setNilaiToko(null));
   }, []);
 
   return (
@@ -63,6 +74,18 @@ export default function Home() {
               Daftar akun
             </Link>
           </div>
+
+          {nilaiToko?.jumlah > 0 && (
+            <a href="#testimoni" className="mt-8 inline-flex items-center gap-3">
+              <Bintang nilai={nilaiToko.rataRata} />
+              <span className="text-sm text-sand-600">
+                <b className="tabular text-sand-800">
+                  {nilaiToko.rataRata.toString().replace(".", ",")}
+                </b>{" "}
+                dari {nilaiToko.jumlah} penilaian pembeli
+              </span>
+            </a>
+          )}
         </div>
       </section>
 
@@ -101,6 +124,35 @@ export default function Home() {
         </section>
       )}
 
+      {testimoni.length > 0 && (
+        <section id="testimoni" className="border-t border-sand-200 bg-white">
+          <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6">
+            <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <h2 className="display text-2xl font-bold text-sand-800">Kata pembeli</h2>
+                <p className="mt-1 text-sm text-sand-500">
+                  Ditulis pembeli setelah barangnya sampai — hanya pesanan yang
+                  benar-benar selesai yang bisa dinilai.
+                </p>
+              </div>
+              {nilaiToko?.jumlah > 0 && (
+                <div className="flex items-center gap-2">
+                  <Bintang nilai={nilaiToko.rataRata} />
+                  <span className="tabular text-sm font-semibold text-sand-700">
+                    {nilaiToko.rataRata.toString().replace(".", ",")}/5
+                  </span>
+                </div>
+              )}
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {testimoni.map((t) => (
+                <KartuTestimoni key={t.id} testimoni={t} />
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
       <section className="border-t border-sand-200 bg-white">
         <div className="mx-auto grid max-w-6xl gap-8 px-4 py-16 sm:grid-cols-3 sm:px-6">
           <Fitur
@@ -119,11 +171,21 @@ export default function Home() {
       </section>
 
       <footer className="border-t border-sand-200 bg-sand-50">
-        <div className="mx-auto max-w-6xl px-4 py-8 text-xs text-sand-400 sm:px-6">
-          Knit &amp; Keep — aplikasi e-commerce thrifting dengan manajemen stok dan
-          pembukuan toko dalam satu tempat.
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 py-8 sm:px-6">
+          <p className="max-w-md text-xs text-sand-400">
+            Knit &amp; Keep — aplikasi e-commerce thrifting dengan manajemen stok dan
+            pembukuan toko dalam satu tempat.
+          </p>
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-xs text-sand-500">
+              Tanya stok, ukuran, atau pesanan: {nomorTampil()}
+            </span>
+            <TombolWa size="sm" variant="garis" />
+          </div>
         </div>
       </footer>
+
+      <WaMelayang />
     </div>
   );
 }

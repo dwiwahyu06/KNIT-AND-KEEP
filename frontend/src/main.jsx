@@ -22,6 +22,7 @@ import AdminOrdersPage from "./pages/AdminOrdersPage.jsx";
 import AdminOrderDetailPage from "./pages/AdminOrderDetailPage.jsx";
 import Kasir from "./pages/Kasir.jsx";
 import AdminRetur from "./pages/AdminRetur.jsx";
+import AdminTestimoni from "./pages/AdminTestimoni.jsx";
 import Barang from "./pages/Barang.jsx";
 import Stock from "./pages/Stock.jsx";
 import KartuStok from "./pages/KartuStok.jsx";
@@ -71,6 +72,7 @@ const router = createBrowserRouter([
   { path: "/AdminOrderDetailPage/:orderId", element: admin(<AdminOrderDetailPage />) },
   { path: "/Kasir", element: admin(<Kasir />) },
   { path: "/AdminRetur", element: admin(<AdminRetur />) },
+  { path: "/AdminTestimoni", element: admin(<AdminTestimoni />) },
   { path: "/Barang", element: admin(<Barang />) },
   { path: "/Stock", element: admin(<Stock />) },
   { path: "/KartuStok", element: admin(<KartuStok />) },
@@ -107,7 +109,7 @@ const router = createBrowserRouter([
 // yang gagal memuat data.
 pasangPenangkapSesi(() => {
   const diHalamanAdmin = window.location.pathname.match(
-    /^\/(Dashboard|AdminOrdersPage|AdminOrderDetailPage|Kasir|AdminRetur|Barang|Stock|KartuStok|Keuangan|Expenses|CashFlow|IncomeStatement|MonthlyReport|User)/i
+    /^\/(Dashboard|AdminOrdersPage|AdminOrderDetailPage|Kasir|AdminRetur|AdminTestimoni|Barang|Stock|KartuStok|Keuangan|Expenses|CashFlow|IncomeStatement|MonthlyReport|User)/i
   );
   keluar();
   window.location.href = diHalamanAdmin ? "/login" : "/LoginPelanggan";

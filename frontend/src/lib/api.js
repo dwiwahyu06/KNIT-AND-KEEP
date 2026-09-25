@@ -161,6 +161,23 @@ export const returApi = {
     api.put(`/retur/pesanan/${transactionId}/tutup`, { catatan }),
 };
 
+// ============ Testimoni & penilaian ============
+export const testimoniApi = {
+  /** Untuk halaman depan — boleh dipanggil tanpa masuk. */
+  publik: (batas = 6) => api.get(`/testimoni/publik?batas=${batas}`),
+  ringkasan: () => api.get("/testimoni/ringkasan"),
+  produk: (productId) => api.get(`/testimoni/produk/${productId}`),
+
+  milikSaya: (pelangganId) => api.get(`/testimoni/user/${pelangganId}`),
+  kirim: (data) => api.post("/testimoni", data),
+  ubah: (id, data) => api.put(`/testimoni/${id}`, data),
+
+  semua: (tampil = "") => api.get(`/testimoni${tampil ? `?tampil=${tampil}` : ""}`),
+  aturTampil: (id, tampil) => api.put(`/testimoni/${id}/tampilkan`, { tampil }),
+  balas: (id, balasanAdmin) => api.put(`/testimoni/${id}/balas`, { balasanAdmin }),
+  hapus: (id) => api.del(`/testimoni/${id}`),
+};
+
 // ============ Keranjang ============
 export const keranjangApi = {
   isi: (pelangganId) => api.get(`/cart/${pelangganId}`),
